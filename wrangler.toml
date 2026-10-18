@@ -1,0 +1,20 @@
+name = "neetflix-bot-test"
+main = "dist/index.js"
+compatibility_date = "2024-11-01"
+
+# Webhook Telegram -> jalankan sekali:
+#   https://<nama-worker>.workers.dev/setwebhook?key=<SETUP_KEY>
+# (wajib pakai key yang sama dengan rahasia SETUP_KEY / SECRET_TOKEN)
+# (?host=... bila pakai custom domain)
+
+[triggers]
+crons = ["*/30 * * * *"]
+
+[[kv_namespaces]]
+binding = "Neetflix_KV"
+id = "dcc697a7a59c449295fcb62ca28cd592"
+
+# Semua variabel TIDAK di-hardcode di sini.
+# - Deploy CI  : dikirim via GitHub Actions secrets -> `wrangler deploy --var KEY:VAL` (.github/workflows/deploy.yml)
+# - Dev lokal  : salin .dev.vars.example -> .dev.vars
+# - Rahasia    : npx wrangler secret put BOT_TOKEN / SECRET_TOKEN / SETUP_KEY

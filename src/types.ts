@@ -1,0 +1,111 @@
+export interface Env {
+  BOT_TOKEN?: string;
+  ADMIN_ID?: string;
+  ADMIN_USERNAME?: string;
+  GROUP_ID?: string;
+  FREE_DAILY_LIMIT?: string;
+  CHANNEL_ID?: string;
+  CHANNEL_URL?: string;
+  COOLDOWN_MS?: string;
+  DONATION_QRIS_URL?: string;
+  BATCH_SIZE?: string;
+  WEBHOOK_PATH?: string;
+  SECRET_TOKEN?: string;
+  SETUP_KEY?: string;
+  Neetflix_KV: KVNamespace;
+}
+
+export interface Config {
+  BOT_TOKEN: string;
+  ADMIN_ID: number;
+  ADMIN_USERNAME: string;
+  GROUP_ID: string;
+  FREE_DAILY_LIMIT: number;
+  CHANNEL_ID: string;
+  CHANNEL_URL: string;
+  COOLDOWN_MS: number;
+  DONATION_QRIS_URL: string;
+  BATCH_SIZE: number;
+  WEBHOOK_PATH: string;
+  SECRET_TOKEN: string;
+  SETUP_KEY: string;
+}
+
+export interface VaultEntry {
+  id: number;
+  rawText: string;
+  email: string;
+  region: string;
+  plan: string;
+  memberSince: string;
+  nextBilling: string;
+}
+
+export interface Stats {
+  date: string;
+  used: number;
+  extra: number;
+  lastGen?: number;
+  joinRewarded?: boolean;
+  joinRewardedAt?: number;
+}
+
+export interface GlobalUser {
+  id: number;
+  username?: string;
+  firstSeen?: string;
+}
+
+export interface NfMetadata {
+  email: string;
+  region: string;
+  plan: string;
+  memberSince: string;
+  nextBilling: string;
+}
+
+export interface NfTokenData {
+  token: string;
+  expires: number;
+}
+
+export interface TgUser {  id: number;
+  is_bot?: boolean;
+  first_name?: string;
+  username?: string;
+}
+
+export interface TgChat {
+  id: number;
+  type?: string;
+}
+
+export interface TgDocument {
+  file_id: string;
+  file_name?: string;
+  mime_type?: string;
+}
+
+export interface TgMessage {
+  message_id: number;
+  from: TgUser;
+  chat: TgChat;
+  text?: string;
+  document?: TgDocument;
+}
+
+export interface TgCallbackQuery {
+  id: string;
+  from: TgUser;
+  message?: TgMessage;
+  data?: string;
+}
+
+export interface TgUpdate {
+  update_id?: number;
+  message?: TgMessage;
+  callback_query?: TgCallbackQuery;
+}
+
+export type RegionFilter = 'sea' | 'asia' | 'europe' | 'america' | 'global';
+export type GenAction = 'gen' | 'random';

@@ -1,0 +1,20 @@
+{
+  "name": "neetflix-bot-tele-worker",
+  "version": "3.1.0",
+  "private": true,
+  "description": "MEDIAFAIRY Netflix Token Bot (Telegram) - Cloudflare Worker",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc -p tsconfig.build.json",
+    "obfuscate": "node scripts/obfuscate.mjs",
+    "deploy": "npm run build && npm run obfuscate && wrangler deploy",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "javascript-obfuscator": "^5.9.0",
+    "typescript": "^5.6.3",
+    "wrangler": "^3.90.0"
+  }
+}

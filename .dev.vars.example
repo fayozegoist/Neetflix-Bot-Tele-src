@@ -1,0 +1,18 @@
+# Salin sebagai .dev.vars untuk dev lokal (wrangler dev)
+# Rahasia BOT_TOKEN juga bisa di-set via: npx wrangler secret put BOT_TOKEN
+# Semua nilai di bawah CONTOH — jangan commit nilai asli.
+
+BOT_TOKEN=
+SECRET_TOKEN=
+# SETUP_KEY=opsional_key_khusus_/setwebhook
+
+ADMIN_ID=
+ADMIN_USERNAME=
+GROUP_ID=
+FREE_DAILY_LIMIT=10
+CHANNEL_ID=
+CHANNEL_URL=
+COOLDOWN_MS=60000
+DONATION_QRIS_URL=
+BATCH_SIZE=40
+WEBHOOK_PATH=/webhook
