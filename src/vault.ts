@@ -2,6 +2,7 @@ import type { Bot } from './bot';
 import type { VaultEntry } from './types';
 import type { InlineButton, ReplyMarkup } from './telegram';
 import { escapeHtml } from './telegram';
+import { flagEmoji } from './countries';
 
 const VAULT_PAGE_SIZE = 10;
 
@@ -33,7 +34,8 @@ export async function sendVaultPage(
     const plan = v.plan || 'Tidak diketahui';
     const memberSince = v.memberSince || 'Tidak diketahui';
     const nextBilling = v.nextBilling || 'Tidak diketahui';
-    msg += `<b>ID:</b> <code>${v.id}</code>\n📧 <code>${escapeHtml(v.email)}</code>\n🌍 Region: ${escapeHtml(region)} | 💎 Plan: ${escapeHtml(plan)}\n🗓 Member: ${escapeHtml(memberSince)} | ⏳ Next Bill: ${escapeHtml(nextBilling)}\n⚙️ Ketik: <code>/gen ${v.id}</code>\n\n`;
+    const flag = v.country ? `${flagEmoji(v.country)} ` : '';
+    msg += `<b>ID:</b> <code>${v.id}</code>\n📧 <code>${escapeHtml(v.email)}</code>\n${flag}🌍 Region: ${escapeHtml(region)} | 💎 Plan: ${escapeHtml(plan)}\n🗓 Member: ${escapeHtml(memberSince)} | ⏳ Next Bill: ${escapeHtml(nextBilling)}\n⚙️ Ketik: <code>/gen ${v.id}</code>\n\n`;
   });
 
   const buttons: InlineButton[] = [];

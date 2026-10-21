@@ -3,8 +3,10 @@ import type { Config } from './types';
 import type { InlineButton, ReplyMarkup } from './telegram';
 import { getStats } from './stats';
 
-export const JOIN_REWARD = 20;
 const OK_STATUSES = ['member', 'administrator', 'creator', 'restricted'];
+
+/** Bonus kuota untuk join channel. Tidak lagi dipakai (mode unlimited). */
+export const JOIN_REWARD = 0;
 
 export async function isChannelMember(bot: Bot, userId: number): Promise<boolean> {
   if (!bot.cfg.CHANNEL_ID) return true;
@@ -28,12 +30,15 @@ export function joinGateMarkup(cfg: Config): ReplyMarkup {
   return { inline_keyboard: buttons };
 }
 
-export async function grantJoinReward(bot: Bot, userId: number): Promise<number | null> {
+/**
+ * Tandai user sudah verifikasi join channel.
+ * Return true bila baru pertama kali terverifikasi.
+ */
+export async function markVerified(bot: Bot, userId: number): Promise<boolean> {
   const s = await getStats(bot, userId);
-  if (s.joinRewarded) return null;
-  s.extra = (s.extra || 0) + JOIN_REWARD;
-  s.joinRewarded = true;
-  s.joinRewardedAt = Date.now();
+  if (s.verified) return false;
+  s.verified = true;
+  s.verifiedAt = Date.now();
   await bot.kv.setStats(userId, s);
-  return JOIN_REWARD;
+  return true;
 }

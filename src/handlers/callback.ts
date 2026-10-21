@@ -1,7 +1,7 @@
 import type { Bot } from '../bot';
-import type { RegionFilter, TgCallbackQuery } from '../types';
-import { grantJoinReward, isChannelMember, joinGateMarkup } from '../gate';
-import { mainMenu } from '../menu';
+import type { TgCallbackQuery } from '../types';
+import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
+import { mainMenu, countryMarkup } from '../menu';
 import { sendVaultPage } from '../vault';
 import { processGeneration } from '../generate';
 
@@ -34,26 +34,27 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
       );
       return;
     }
-    const granted = await grantJoinReward(bot, userId);
+    const fresh = await markVerified(bot, userId);
     await bot.api('answerCallbackQuery', {
       callback_query_id: callbackQuery.id,
-      text: granted ? `🎁 +${granted} kuota!` : '✅ Verifikasi berhasil',
+      text: fresh ? '✅ Verifikasi berhasil!' : '✅ Sudah terverifikasi',
       show_alert: false,
     });
-    const msg = granted
-      ? `✅ <b>Verifikasi Berhasil!</b>\n\n🎁 Reward <b>+${granted} kuota ekstra</b> telah ditambahkan ke akun Anda (hanya sekali).\nSilakan pilih menu di bawah ini:`
+    const msg = fresh
+      ? '✅ <b>Verifikasi Berhasil!</b>\nSelamat datang! Silakan pilih menu di bawah ini:'
       : '✅ <b>Verifikasi Berhasil!</b>\nSelamat datang kembali!';
     await bot.send(chatId, msg, { markup: mainMenu(false) });
     return;
   }
 
+  // --- Gate join channel untuk semua aksi lain ---
   if (!isAdmin && bot.cfg.CHANNEL_ID) {
     const member = await isChannelMember(bot, userId);
     if (!member) {
       await bot.send(chatId, '🔒 <b>Akses Terkunci.</b>\nJoin channel dulu lalu verifikasi.', { markup: joinGateMarkup(bot.cfg) });
       return;
     }
-    await grantJoinReward(bot, userId);
+    await markVerified(bot, userId);
   }
 
   await bot.api('answerCallbackQuery', { callback_query_id: callbackQuery.id });
@@ -66,11 +67,26 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
     return;
   }
 
-  if (data.startsWith('random_')) {
-    const region = data.split('_')[1] as RegionFilter | undefined;
+  // Halaman menu negara
+  if (data.startsWith('rcpage_')) {
+    const page = parseInt(data.split('_')[1], 10);
+    if (Number.isNaN(page)) return;
+    await bot.api('editMessageText', {
+      chat_id: chatId,
+      message_id: messageId,
+      text: '🌍 <b>Pilih Negara:</b>\nPilih negara akun yang ingin kamu generate.',
+      parse_mode: 'HTML',
+      reply_markup: countryMarkup(page),
+    });
+    return;
+  }
+
+  // Pilih negara -> generate random
+  if (data.startsWith('rc_')) {
+    const country = data.slice(3) || 'global';
     const username = callbackQuery.from.username ? `@${callbackQuery.from.username}` : 'TanpaUsername';
     await bot.api('deleteMessage', { chat_id: chatId, message_id: messageId });
-    await processGeneration(bot, chatId, userId, username, isAdmin, null, 'random', region || null);
+    await processGeneration(bot, chatId, userId, username, isAdmin, null, 'random', country);
     return;
   }
 }

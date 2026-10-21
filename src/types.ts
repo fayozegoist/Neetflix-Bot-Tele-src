@@ -9,6 +9,8 @@ export interface Env {
   COOLDOWN_MS?: string;
   DONATION_QRIS_URL?: string;
   BATCH_SIZE?: string;
+  CONVERT_BATCH?: string;
+  BROADCAST_BATCH?: string;
   WEBHOOK_PATH?: string;
   SECRET_TOKEN?: string;
   SETUP_KEY?: string;
@@ -26,6 +28,8 @@ export interface Config {
   COOLDOWN_MS: number;
   DONATION_QRIS_URL: string;
   BATCH_SIZE: number;
+  CONVERT_BATCH: number;
+  BROADCAST_BATCH: number;
   WEBHOOK_PATH: string;
   SECRET_TOKEN: string;
   SETUP_KEY: string;
@@ -36,6 +40,8 @@ export interface VaultEntry {
   rawText: string;
   email: string;
   region: string;
+  /** Kode negara ISO2 hasil resolusi region (opsional, untuk vault lama). */
+  country?: string;
   plan: string;
   memberSince: string;
   nextBilling: string;
@@ -46,6 +52,9 @@ export interface Stats {
   used: number;
   extra: number;
   lastGen?: number;
+  /** Sudah verifikasi join channel (menggantikan joinRewarded). */
+  verified?: boolean;
+  verifiedAt?: number;
   joinRewarded?: boolean;
   joinRewardedAt?: number;
 }
@@ -109,3 +118,6 @@ export interface TgUpdate {
 
 export type RegionFilter = 'sea' | 'asia' | 'europe' | 'america' | 'global';
 export type GenAction = 'gen' | 'random';
+
+/** Kode negara ISO2 (mis. 'ID'), atau 'global' untuk semua negara. */
+export type CountryFilter = string;

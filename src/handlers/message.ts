@@ -2,8 +2,8 @@ import type { Bot } from '../bot';
 import type { Stats, TgDocument, TgMessage } from '../types';
 import { escapeHtml } from '../telegram';
 import { getStats, getWIBDate, nowWIB, registerUser } from '../stats';
-import { grantJoinReward, isChannelMember, joinGateMarkup, JOIN_REWARD } from '../gate';
-import { mainMenu, regionMarkup } from '../menu';
+import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
+import { countryMarkup, mainMenu } from '../menu';
 import { sendVaultPage } from '../vault';
 import { handleDonasi } from '../donation';
 import { processGeneration } from '../generate';
@@ -11,6 +11,8 @@ import { processConvert } from '../convert';
 import { BROADCAST_BATCH, processBroadcastBatch } from '../broadcast';
 
 const deny = (bot: Bot, chatId: number, text: string) => bot.send(chatId, text);
+
+const cooldownSec = (bot: Bot): number => Math.round(bot.cfg.COOLDOWN_MS / 1000);
 
 export async function handleMessage(bot: Bot, message: TgMessage): Promise<void> {
   const chatId = message.chat.id;
@@ -27,6 +29,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
 
   if (!isAdmin) await registerUser(bot, userId, username);
 
+  // --- Gate join channel (wajib, admin exempt) ---
   if (!isAdmin && bot.cfg.CHANNEL_ID) {
     const member = await isChannelMember(bot, userId);
     if (!member) {
@@ -35,16 +38,12 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
         `🔒 <b>Akses Terkunci</b>\n\n` +
           `Untuk menggunakan bot, wajib <b>join channel</b> kami dulu:\n` +
           (bot.cfg.CHANNEL_URL ? `👉 <a href="${bot.cfg.CHANNEL_URL}">${bot.cfg.CHANNEL_URL}</a>\n\n` : '') +
-          `Setelah join, tekan tombol <b>Verifikasi</b> di bawah.\n\n` +
-          `🎁 <b>Reward:</b> Dapatkan <b>+${JOIN_REWARD} kuota ekstra</b> (sekali) setelah verifikasi berhasil!`,
+          `Setelah join, tekan tombol <b>Verifikasi</b> di bawah.`,
         { markup: joinGateMarkup(bot.cfg) }
       );
       return;
     }
-    const granted = await grantJoinReward(bot, userId);
-    if (granted) {
-      await bot.send(chatId, `🎁 <b>Reward Join!</b> Anda mendapat bonus <b>+${granted} kuota ekstra</b> (sekali).`);
-    }
+    await markVerified(bot, userId);
   }
 
   if (text === '/clearvault') {
@@ -73,29 +72,13 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     return;
   }
 
-  if (isAdmin && text.startsWith('/addquota ')) {
-    const parts = text.split(' ');
-    const targetId = parseInt(parts[1], 10);
-    const amount = parseInt(parts[2], 10);
-    if (targetId && amount) {
-      const targetStats = await getStats(bot, targetId);
-      targetStats.extra = (targetStats.extra || 0) + amount;
-      await bot.kv.setStats(targetId, targetStats);
-      await bot.send(chatId, `✅ <b>Berhasil!</b> Ditambahkan ${amount} kuota ekstra untuk ID: <code>${targetId}</code>.`);
-      await bot.send(targetId, `🎉 <b>Kabar Baik!</b> Admin telah menambahkan <b>${amount}</b> kuota ekstra ke akun Anda.`);
-    } else {
-      await bot.send(chatId, '❌ Format salah. Gunakan: <code>/addquota [ID_USER] [JUMLAH]</code>');
-    }
-    return;
-  }
-
-  if (isAdmin && text.startsWith('/resetlimit ')) {
+  if (isAdmin && text.startsWith('/resetcooldown ')) {
     const targetId = parseInt(text.split(' ')[1], 10);
     if (targetId) {
       const targetStats = await getStats(bot, targetId);
-      targetStats.used = 0;
+      targetStats.lastGen = 0;
       await bot.kv.setStats(targetId, targetStats);
-      await bot.send(chatId, `✅ <b>Berhasil!</b> Limit ID: <code>${targetId}</code> direset.`);
+      await bot.send(chatId, `✅ <b>Berhasil!</b> Cooldown ID: <code>${targetId}</code> direset.`);
     }
     return;
   }
@@ -126,19 +109,20 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   if (isAdmin && text === '/stats') {
     const vault = (await bot.kv.getVault()) || [];
     const users = (await bot.kv.getUsers()) || [];
-    let rewarded = 0;
+    let verified = 0;
     const statKeys = await bot.kv.listKeys('stats_');
     for (const k of statKeys) {
       const s = await bot.kv.getJson<Stats>(k);
-      if (s && s.joinRewarded) rewarded++;
+      if (s && (s.verified || s.joinRewarded)) verified++;
     }
     await bot.send(
       chatId,
       `📊 <b>STATISTIK SERVER</b>\n\n` +
         `📁 Vault: <b>${vault.length}</b> akun\n` +
         `👥 User terdaftar: <b>${users.length}</b>\n` +
-        `🎁 Reward join: <b>${rewarded}</b> user\n` +
+        `✅ Terverifikasi join: <b>${verified}</b> user\n` +
         `🗑️ Auto-validasi: batch ${bot.cfg.BATCH_SIZE} akun per run\n` +
+        `🔄 Convert batch: ${bot.cfg.CONVERT_BATCH} akun per file\n` +
         `🕐 Waktu: ${nowWIB()}`
     );
     return;
@@ -149,8 +133,8 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
       chatId,
       `👋 <b>Selamat datang di MEDIAFAIRY Netflix Token!</b>\n\n` +
         `Bot ini dapat memberikan Anda <i>Token Auto-Login Netflix</i> secara instan.\n\n` +
-        `Setiap user memiliki kuota gratis <b>${bot.cfg.FREE_DAILY_LIMIT}x Generate per hari</b> (Reset setiap pukul 00:00 WIB), dengan jeda <b>1 menit</b> antar generate.\n\n` +
-        `🎁 Join channel kami & verifikasi untuk bonus <b>+${JOIN_REWARD} kuota ekstra</b> (sekali).\n\n` +
+        `✨ <b>Tanpa batas kuota</b> — dengan jeda <b>${cooldownSec(bot)} detik</b> antar generate.\n\n` +
+        `📢 Wajib <b>join channel</b> kami & verifikasi sebelum bisa generate.\n\n` +
         `👇 <b>Silakan pilih menu di bawah ini:</b>`,
       { markup: mainMenu(isAdmin) }
     );
@@ -158,13 +142,13 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '🔑 Generate Token') {
-    await bot.send(chatId, '🛠️ <b>Menu Generate Token</b>\n\n<b>Cara Penggunaan:</b>\n1. Dari teks manual: Kirim <code>/gen [teks_cookie]</code>\n2. Dari ID Vault: Kirim <code>/gen [nomor_id]</code>');
+    await bot.send(chatId, '🛠️ <b>Menu Generate Token</b>\n\n<b>Cara Penggunaan:</b>1. Dari teks manual: Kirim <code>/gen [teks_cookie]</code>2. Dari ID Vault: Kirim <code>/gen [nomor_id]</code>');
     return;
   }
 
   if (text === '🔄 Convert Netscape') {
     if (!isAdmin) return void (await deny(bot, chatId, '⛔ <b>Akses Ditolak.</b>'));
-    await bot.send(chatId, '🔄 <b>Menu Convert Netscape (Admin Only)</b>\n\nData otomatis di-<b>verifikasi</b>. Jika valid, akan masuk ke Vault Global.\n\n1. Manual: <code>/conv [teks_netscape]</code>\n2. Massal: <b>Kirimkan file .txt</b>');
+    await bot.send(chatId, '🔄 <b>Menu Convert (Admin Only)</b>\n\nData otomatis di-<b>verifikasi</b>. Cookie mati atau Next Billing sudah lewat akan <b>otomatis dibuang</b>. Hanya akun aktif yang masuk ke Vault Global.\n\n1. Manual: <code>/conv [teks_cookie]</code>2. Massal: <b>Kirimkan file .txt</b>');
     return;
   }
 
@@ -176,19 +160,20 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
 
   if (text === '📊 Cek Limit') {
     const stats = await getStats(bot, userId);
-    const sisaBase = Math.max(bot.cfg.FREE_DAILY_LIMIT - stats.used, 0);
-    const sisaExtra = stats.extra || 0;
-    const rewardStatus = stats.joinRewarded
-      ? `✅ Sudah (reward +${JOIN_REWARD} diberikan)`
-      : `❌ Belum — join channel & verifikasi untuk +${JOIN_REWARD}`;
+    const cooldown = bot.cfg.COOLDOWN_MS;
+    const remainMs = stats.lastGen ? Math.max(0, cooldown - (Date.now() - stats.lastGen)) : 0;
+    const remainSec = Math.ceil(remainMs / 1000);
+    const cooldownText = remainMs > 0 ? `⏳ <b>${remainSec} detik</b> lagi` : '✅ <b>Siap</b> (generate sekarang)';
+    const verifyStatus = stats.verified || stats.joinRewarded ? '✅ Sudah verifikasi' : '❌ Belum verifikasi';
     await bot.send(
       chatId,
-      `📊 <b>Informasi Limit MEDIAFAIRY</b>\n\n` +
+      `📊 <b>Status MEDIAFAIRY</b>\n\n` +
         `📅 <b>Tanggal:</b> ${getWIBDate()} (WIB)\n\n` +
-        `🔄 <b>Limit Gratis:</b> ${sisaBase}/${bot.cfg.FREE_DAILY_LIMIT}\n` +
-        `💎 <b>Kuota Ekstra:</b> ${sisaExtra}\n` +
-        `🎁 <b>Reward Join:</b> ${rewardStatus}\n\n` +
-        `⏱ <b>Jeda Generate:</b> 1 menit antar generate`
+        `♾️ <b>Kuota:</b> Unlimited (tanpa batas)\n` +
+        `⏱ <b>Cooldown:</b> ${cooldownSec(bot)} detik antar generate\n` +
+        `⏳ <b>Sisa cooldown:</b> ${cooldownText}\n` +
+        `📢 <b>Join Channel:</b> ${verifyStatus}\n\n` +
+        `<i>Generate bebas, asal tidak lebih dari 1x per ${cooldownSec(bot)} detik.</i>`
     );
     return;
   }
@@ -204,8 +189,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
       `⚙️ <b>Panel Kontrol Admin</b>\n\n` +
         `🗑️ Hapus Vault: <code>/clearvault</code>\n` +
         `🗑️ Hapus 1 Akun: <code>/del [ID]</code>\n` +
-        `➕ Tambah Kuota: <code>/addquota [ID_USER] [JUMLAH]</code>\n` +
-        `🔄 Reset Limit: <code>/resetlimit [ID_USER]</code>\n` +
+        `🔄 Reset Cooldown: <code>/resetcooldown [ID_USER]</code>\n` +
         `📢 Broadcast: <code>/broadcast [PESAN]</code>\n` +
         `📊 Stats Server: <code>/stats</code>`
     );
@@ -233,7 +217,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '🎲 Generate Random') {
-    await bot.send(chatId, '🌍 <b>Pilih Region Akun:</b>\nSilakan pilih spesifikasi wilayah untuk akun yang ingin Anda generate.', { markup: regionMarkup() });
+    await bot.send(chatId, '🌍 <b>Pilih Negara Akun:</b>\nSilakan pilih negara untuk akun yang ingin kamu generate.', { markup: countryMarkup(0) });
     return;
   }
 

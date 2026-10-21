@@ -17,8 +17,11 @@ export default {
     if (url.pathname === '/setwebhook') {
       const key = url.searchParams.get('key') || '';
       const expected = cfg.SETUP_KEY || cfg.SECRET_TOKEN;
-      if (!expected || key !== expected) {
-        return new Response('Forbidden: key salah / belum di-set.', { status: 401 });
+      if (!expected) {
+        return new Response('Forbidden: SETUP_KEY / SECRET_TOKEN belum di-set.', { status: 401 });
+      }
+      if (key !== expected) {
+        return new Response('Forbidden: key salah.', { status: 401 });
       }
       const host = url.searchParams.get('host') || request.headers.get('host') || '';
       const webhookUrl = `https://${host}${cfg.WEBHOOK_PATH}`;
@@ -29,11 +32,13 @@ export default {
     }
 
     if (request.method === 'POST' && (url.pathname === cfg.WEBHOOK_PATH || url.pathname === '/')) {
-      if (cfg.SECRET_TOKEN) {
-        const headerToken = request.headers.get('x-telegram-bot-api-secret-token');
-        if (headerToken !== cfg.SECRET_TOKEN) {
-          return new Response('Forbidden', { status: 401 });
-        }
+      // Fail-closed: tanpa SECRET_TOKEN, semua request webhook ditolak.
+      if (!cfg.SECRET_TOKEN) {
+        return new Response('Forbidden: SECRET_TOKEN belum di-set.', { status: 401 });
+      }
+      const headerToken = request.headers.get('x-telegram-bot-api-secret-token');
+      if (headerToken !== cfg.SECRET_TOKEN) {
+        return new Response('Forbidden', { status: 401 });
       }
       try {
         const update = (await request.json()) as TgUpdate;
@@ -57,13 +62,19 @@ export default {
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
     const bot = new Bot(readConfig(env), new KVStore(env.Neetflix_KV));
     if (!bot.cfg.BOT_TOKEN) return;
-    try {
-      await processBroadcastBatch(bot);
-    } catch (e) {
-      console.error('processBroadcastBatch error:', (e as Error).message);
+
+    // Broadcast DAN validasi tidak boleh jalan bersamaan: total subrequest
+    // bisa melebihi batas 50 subrequest per eksekusi pada free plan.
+    const hadPending = await bot.kv.getPendingMessage('bcast_pending').catch(() => null);
+    if (hadPending) {
+      try {
+        await processBroadcastBatch(bot);
+      } catch (e) {
+        console.error('processBroadcastBatch error:', (e as Error).message);
+      }
+      return; // broadcast berjalan -> skip validasi di run ini
     }
-    const pending = await bot.kv.getPendingMessage('bcast_pending').catch(() => null);
-    if (pending) return;
+
     try {
       await validateBatch(bot);
     } catch (e) {

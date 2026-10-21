@@ -8,6 +8,20 @@ function safeDecode(value: string): string {
   }
 }
 
+/**
+ * Prefix bullet/dash yang sering dipakai file cookie:
+ * "– Email:", "• Email:", "- Email:", "* Email:", "# Email:".
+ */
+const META_PREFIX = /^\s*[#\-–—•*·>‣▪◦]+\s*/;
+
+/**
+ * Ambil metadata akun dari teks cookie.
+ *
+ * Catatan: field "Expires" SENGAJA DIABAIKAN. Field itu adalah masa berlaku
+ * link login (nftoken), BUKAN masa berlaku cookie NetflixId. Cookie bisa
+ * tetap hidup jauh setelah link login-nya basi, jadi memakai "Expires"
+ * sebagai kriteria akan membuang akun yang masih bisa dipakai.
+ */
 export function extractMetadata(text: string): NfMetadata {
   let email = 'Tidak diketahui';
   let region = 'Tidak diketahui';
@@ -16,18 +30,21 @@ export function extractMetadata(text: string): NfMetadata {
   let nextBilling = 'Tidak diketahui';
 
   text.split('\n').forEach((line) => {
-    const trimmed = line.trim();
-    if (/^(?:#\s*)?Email\s*:/i.test(trimmed)) {
-      email = trimmed.replace(/^(?:#\s*)?Email\s*:/i, '').trim();
-    } else if (/^(?:#\s*)?(Country|Region)\s*:/i.test(trimmed)) {
-      const rawRegion = trimmed.replace(/^(?:#\s*)?(Country|Region)\s*:/i, '').trim();
+    const trimmed = line.replace(META_PREFIX, '').trim();
+    if (!trimmed) return;
+
+    let m: RegExpMatchArray | null;
+    if ((m = trimmed.match(/^Email\s*:\s*(.*)$/i))) {
+      email = m[1].trim() || email;
+    } else if ((m = trimmed.match(/^(?:Country|Region)\s*:\s*(.*)$/i))) {
+      const rawRegion = m[1].trim();
       region = rawRegion.replace(/[^\x20-\x7E]/g, '').trim() || rawRegion;
-    } else if (/^(?:#\s*)?Plan\s*:/i.test(trimmed)) {
-      plan = trimmed.replace(/^(?:#\s*)?Plan\s*:/i, '').trim();
-    } else if (/^(?:#\s*)?Member Since\s*:/i.test(trimmed)) {
-      memberSince = trimmed.replace(/^(?:#\s*)?Member Since\s*:/i, '').trim();
-    } else if (/^(?:#\s*)?Next Billing\s*:/i.test(trimmed)) {
-      nextBilling = trimmed.replace(/^(?:#\s*)?Next Billing\s*:/i, '').trim();
+    } else if ((m = trimmed.match(/^Plan\s*:\s*(.*)$/i))) {
+      plan = m[1].trim() || plan;
+    } else if ((m = trimmed.match(/^Member\s+Since\s*:\s*(.*)$/i))) {
+      memberSince = m[1].trim() || memberSince;
+    } else if ((m = trimmed.match(/^Next\s+Billing\s*:\s*(.*)$/i))) {
+      nextBilling = m[1].trim() || nextBilling;
     }
   });
 
@@ -141,6 +158,7 @@ function buildHeaders(netflixId: string): Record<string, string> {
 export async function fetchNfToken(netflixId: string): Promise<NfTokenData> {
   const response = await fetch(`${API_URL}?${buildParams().toString()}`, {
     headers: buildHeaders(netflixId),
+    signal: AbortSignal.timeout(10000),
   });
   if (!response.ok) throw new Error(`Koneksi ditolak (Status: ${response.status})`);
 

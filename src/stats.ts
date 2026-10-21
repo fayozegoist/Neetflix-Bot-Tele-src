@@ -22,7 +22,14 @@ export async function getStats(bot: Bot, userId: number): Promise<Stats> {
   return s;
 }
 
+/** Kuota dibebaskan sepenuhnya bila limit <= 0 (mode unlimited). */
+export function isUnlimited(freeDailyLimit: number): boolean {
+  return freeDailyLimit <= 0;
+}
+
+/** Sisa kuota; Infinity bila mode unlimited. */
 export function remainingQuota(stats: Stats, freeDailyLimit: number): number {
+  if (isUnlimited(freeDailyLimit)) return Infinity;
   const base = freeDailyLimit - (stats.used || 0);
   return (base > 0 ? base : 0) + (stats.extra || 0);
 }

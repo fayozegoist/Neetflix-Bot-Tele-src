@@ -1,6 +1,7 @@
 import type { Bot } from './bot';
 import { nowWIB, sleep } from './stats';
 import { extractCookieDict, fetchNfToken } from './netflix';
+import { isBillingExpired } from './dateparse';
 
 export async function validateBatch(bot: Bot): Promise<void> {
   const vault = (await bot.kv.getVault()) || [];
@@ -24,8 +25,10 @@ export async function validateBatch(bot: Bot): Promise<void> {
     } catch {
       ok = false;
     }
+    // Akun yang Next Billing-nya sudah lewat juga dibuang.
+    if (ok && isBillingExpired(v.nextBilling)) ok = false;
     if (!ok) deadIds.add(v.id);
-    await sleep(200);
+    await sleep(150);
   }
 
   let remainingVault = vault;
@@ -51,7 +54,7 @@ export async function validateBatch(bot: Bot): Promise<void> {
       chat_id: bot.cfg.ADMIN_ID,
       text:
         `🧹 <b>AUTO-VALIDASI SELESAI</b> (${nowWIB()})\n\n` +
-        `🗑️ Akun mati dihapus pada batch terakhir: <b>${removed}</b>\n` +
+        `🗑️ Akun mati / billing lewat dihapus: <b>${removed}</b>\n` +
         `📦 Sisa akun: <b>${remaining}</b>`,
       parse_mode: 'HTML',
     });

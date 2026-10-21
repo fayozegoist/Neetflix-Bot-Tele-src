@@ -5,18 +5,27 @@ function toInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, max));
+}
+
 export function readConfig(env: Env): Config {
   return {
     BOT_TOKEN: env.BOT_TOKEN || '',
     ADMIN_ID: toInt(env.ADMIN_ID, 0),
     ADMIN_USERNAME: (env.ADMIN_USERNAME || '').replace(/^@/, ''),
     GROUP_ID: env.GROUP_ID || '',
-    FREE_DAILY_LIMIT: toInt(env.FREE_DAILY_LIMIT, 10),
+    // 0 (atau negatif) = unlimited generate
+    FREE_DAILY_LIMIT: toInt(env.FREE_DAILY_LIMIT, 0),
     CHANNEL_ID: env.CHANNEL_ID || '',
     CHANNEL_URL: env.CHANNEL_URL || '',
     COOLDOWN_MS: toInt(env.COOLDOWN_MS, 60000),
     DONATION_QRIS_URL: env.DONATION_QRIS_URL || '',
-    BATCH_SIZE: Math.min(toInt(env.BATCH_SIZE, 40), 45),
+    // Batas <=25: tiap akun butuh ~600ms request Netflix, dan free plan
+    // membatasi 50 subrequest per eksekusi Worker.
+    BATCH_SIZE: clamp(toInt(env.BATCH_SIZE, 25), 1, 25),
+    CONVERT_BATCH: clamp(toInt(env.CONVERT_BATCH, 25), 1, 25),
+    BROADCAST_BATCH: clamp(toInt(env.BROADCAST_BATCH, 25), 1, 25),
     WEBHOOK_PATH: env.WEBHOOK_PATH || '/webhook',
     SECRET_TOKEN: env.SECRET_TOKEN || '',
     SETUP_KEY: env.SETUP_KEY || '',

@@ -1,33 +1,22 @@
 import type { Bot } from './bot';
-import type { GenAction, RegionFilter, VaultEntry } from './types';
+import type { CountryFilter, GenAction, VaultEntry } from './types';
 import { adminContact, escapeHtml } from './telegram';
-import { getStats, remainingQuota } from './stats';
+import { getStats, isUnlimited, remainingQuota } from './stats';
 import { extractCookieDict, extractMetadata, fetchNfToken, maskEmail } from './netflix';
+import { resolveCountry } from './countries';
 
-const REGION_KEYWORDS: Record<Exclude<RegionFilter, 'global'>, string[]> = {
-  sea: ['id', 'sg', 'my', 'ph', 'th', 'vn', 'indonesia', 'malaysia', 'singapore', 'philippines', 'thailand', 'vietnam'],
-  asia: [
-    'jp', 'kr', 'tw', 'hk', 'in', 'tr',
-    'japan', 'korea', 'taiwan', 'hong', 'india', 'turkey',
-    'id', 'sg', 'my', 'ph', 'th', 'vn',
-    'indonesia', 'malaysia', 'singapore', 'philippines', 'thailand', 'vietnam',
-  ],
-  europe: ['gb', 'uk', 'fr', 'de', 'es', 'it', 'nl', 'se', 'france', 'germany', 'spain', 'italy', 'netherlands', 'sweden'],
-  america: ['us', 'ca', 'br', 'ar', 'mx', 'united states', 'canada', 'brazil', 'mexico', 'argentina'],
-};
+const MAX_RANDOM_ATTEMPTS = 5;
 
-function matchRegion(regionText: string, keywords: string[]): boolean {
-  return keywords.some((c) => new RegExp(`\\b${c}\\b`).test(regionText));
+/** Ambil kode negara dari entry vault (fallback ke resolusi region). */
+export function entryCountry(v: VaultEntry): string | null {
+  if (v.country) return v.country;
+  return resolveCountry(v.region);
 }
 
-function filterVaultByRegion(vault: VaultEntry[], regionFilter: RegionFilter): VaultEntry[] {
-  if (regionFilter === 'global') return vault;
-  const keywords = REGION_KEYWORDS[regionFilter];
-  if (!keywords) return vault;
-  return vault.filter((v) => {
-    const r = (v.region || 'Tidak diketahui').toLowerCase();
-    return matchRegion(r, keywords);
-  });
+/** Filter vault berdasarkan kode negara. */
+export function filterVaultByCountry(vault: VaultEntry[], country: CountryFilter | null): VaultEntry[] {
+  if (!country || country === 'global') return vault;
+  return vault.filter((v) => entryCountry(v) === country);
 }
 
 export async function processGeneration(
@@ -38,35 +27,45 @@ export async function processGeneration(
   isAdmin: boolean,
   inputData: string | null,
   action: GenAction,
-  regionFilter: RegionFilter | null
+  countryFilter: CountryFilter | null
 ): Promise<void> {
   const stats = await getStats(bot, userId);
 
+  // --- Cooldown (admin bypass) ---
   if (!isAdmin && stats.lastGen) {
     const waitMs = bot.cfg.COOLDOWN_MS - (Date.now() - stats.lastGen);
     if (waitMs > 0) {
       const sec = Math.ceil(waitMs / 1000);
+      const cooldownSec = Math.round(bot.cfg.COOLDOWN_MS / 1000);
       await bot.send(
         chatId,
-        `⏳ <b>Mohon tunggu ${sec} detik</b> sebelum generate berikutnya.\nJeda antar generate: <b>1 menit</b>.`
+        `⏳ <b>Mohon tunggu ${sec} detik</b> sebelum generate berikutnya.\nJeda antar generate: <b>${cooldownSec} detik</b>.`
       );
       return;
     }
   }
 
-  if (remainingQuota(stats, bot.cfg.FREE_DAILY_LIMIT) <= 0) {
+  // --- Limit kuota (dilewati bila unlimited) ---
+  if (!isUnlimited(bot.cfg.FREE_DAILY_LIMIT) && remainingQuota(stats, bot.cfg.FREE_DAILY_LIMIT) <= 0) {
     await bot.send(
       chatId,
-      `⛔ <b>Akses Ditolak: Limit Habis!</b>\nAnda telah menggunakan seluruh batas Harian (${bot.cfg.FREE_DAILY_LIMIT}x) dan Kuota Ekstra Anda kosong.\n\n🎁 Dapatkan kuota ekstra dengan bergabung & verifikasi di channel kami, atau hubungi admin: ${adminContact(bot.cfg)}.`
+      `⛔ <b>Akses Ditolak: Limit Habis!</b>\nAnda telah menggunakan seluruh batas harian (${bot.cfg.FREE_DAILY_LIMIT}x).\n\nHubungi admin: ${adminContact(bot.cfg)}.`
     );
     return;
   }
 
-  if (!isAdmin) stats.lastGen = Date.now();
+  // --- Catat cooldown SEBELUM generate ---
+  // Penting: cooldown harus tetap terpakai walau generate gagal, kalau tidak
+  // user bisa spam retry tanpa jeda sama sekali.
+  if (!isAdmin) {
+    stats.lastGen = Date.now();
+    await bot.kv.setStats(userId, stats);
+  }
 
+  const countryLabel = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
   await bot.send(
     chatId,
-    `🔄 Memverifikasi${regionFilter ? ` dengan filter Region: <b>${regionFilter.toUpperCase()}</b>` : ''}... mohon tunggu.`
+    `🔄 Memverifikasi${countryFilter ? ` dengan filter Negara: <b>${countryLabel}</b>` : ''}... mohon tunggu.`
   );
 
   try {
@@ -76,27 +75,22 @@ export async function processGeneration(
     let meta: ReturnType<typeof extractMetadata> | null = null;
 
     if (action === 'random') {
-      if (vault.length === 0) {
-        await bot.send(chatId, '⚠️ <b>Maaf, Vault saat ini kosong.</b>');
-        return;
-      }
-
-      let filteredVault = regionFilter ? filterVaultByRegion(vault, regionFilter) : vault;
+      const filteredVault = filterVaultByCountry(vault, countryFilter);
 
       if (filteredVault.length === 0) {
+        const scope = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
         await bot.send(
           chatId,
-          `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan region <b>${(regionFilter || 'Semua').toUpperCase()}</b> di Vault saat ini.`
+          `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan negara <b>${scope}</b> di Vault saat ini.`
         );
         return;
       }
 
-      const maxAttempts = 5;
       let success = false;
       let accountsRemoved = 0;
       const deadIds = new Set<number>();
 
-      for (let i = 0; i < maxAttempts; i++) {
+      for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
         if (filteredVault.length === 0) break;
 
         const randomIdx = Math.floor(Math.random() * filteredVault.length);
@@ -131,7 +125,7 @@ export async function processGeneration(
       if (!success) {
         await bot.send(
           chatId,
-          `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan klik 🎲 <b>Generate Random</b> lagi untuk menguji antrean akun berikutnya.`
+          `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.`
         );
         return;
       }
@@ -182,16 +176,20 @@ export async function processGeneration(
     await bot.send(chatId, premiumOutput);
 
     if (!isAdmin) {
-      if (stats.used < bot.cfg.FREE_DAILY_LIMIT) stats.used += 1;
-      else stats.extra = Math.max(0, (stats.extra || 0) - 1);
-      await bot.kv.setStats(userId, stats);
+      if (!isUnlimited(bot.cfg.FREE_DAILY_LIMIT)) {
+        if (stats.used < bot.cfg.FREE_DAILY_LIMIT) stats.used += 1;
+        else stats.extra = Math.max(0, (stats.extra || 0) - 1);
+        await bot.kv.setStats(userId, stats);
+      }
 
-      try {
-        const notifMsg =
-          `<b>NETFLIX GENERATED</b>\n<pre><code class="language-txt">👤 User   : ${escapeHtml(username)}\n🆔 ID     : ${userId}\n📧 Email  : ${escapeHtml(maskedEmail)}\n🌍 Region : ${escapeHtml(meta.region)}\n💎 Plan   : ${escapeHtml(meta.plan)}</code></pre>`;
-        await bot.api('sendMessage', { chat_id: bot.cfg.GROUP_ID, text: notifMsg, parse_mode: 'HTML' });
-      } catch (e) {
-        console.error('Gagal mengirim notif:', e);
+      if (bot.cfg.GROUP_ID) {
+        try {
+          const notifMsg =
+            `<b>NETFLIX GENERATED</b>\n<pre><code class="language-txt">👤 User   : ${escapeHtml(username)}\n🆔 ID     : ${userId}\n📧 Email  : ${escapeHtml(maskedEmail)}\n🌍 Region : ${escapeHtml(meta.region)}\n💎 Plan   : ${escapeHtml(meta.plan)}</code></pre>`;
+          await bot.api('sendMessage', { chat_id: bot.cfg.GROUP_ID, text: notifMsg, parse_mode: 'HTML' });
+        } catch (e) {
+          console.error('Gagal mengirim notif:', e);
+        }
       }
     }
   } catch (e) {

@@ -1,7 +1,7 @@
 import type { Bot } from './bot';
 import { sleep } from './stats';
 
-export const BROADCAST_BATCH = 40;
+export const BROADCAST_BATCH = 25;
 
 export async function processBroadcastBatch(bot: Bot): Promise<void> {
   const pesan = await bot.kv.getPendingMessage('bcast_pending');

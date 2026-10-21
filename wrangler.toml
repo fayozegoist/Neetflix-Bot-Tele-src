@@ -1,8 +1,8 @@
-name = "neetflix-bot-test"
+name = "neetflix-bot-v2"
 main = "dist/index.js"
 compatibility_date = "2024-11-01"
 
-# Webhook Telegram -> jalankan sekali:
+# Webhook Telegram -> jalankan sekali setelah deploy:
 #   https://<nama-worker>.workers.dev/setwebhook?key=<SETUP_KEY>
 # (wajib pakai key yang sama dengan rahasia SETUP_KEY / SECRET_TOKEN)
 # (?host=... bila pakai custom domain)
@@ -12,9 +12,24 @@ crons = ["*/30 * * * *"]
 
 [[kv_namespaces]]
 binding = "Neetflix_KV"
-id = "dcc697a7a59c449295fcb62ca28cd592"
+id = "b5505b88b1ab4a06918e72505c9328b9"
 
-# Semua variabel TIDAK di-hardcode di sini.
-# - Deploy CI  : dikirim via GitHub Actions secrets -> `wrangler deploy --var KEY:VAL` (.github/workflows/deploy.yml)
-# - Dev lokal  : salin .dev.vars.example -> .dev.vars
-# - Rahasia    : npx wrangler secret put BOT_TOKEN / SECRET_TOKEN / SETUP_KEY
+# Variabel NON-rahasia ditaruh di sini supaya deploy berikutnya tidak
+# kehilangan konfigurasi. Rahasia (BOT_TOKEN, SECRET_TOKEN, SETUP_KEY)
+# disimpan lewat `wrangler secret put`, TIDAK di file ini.
+[vars]
+ADMIN_ID = "6968439759"
+ADMIN_USERNAME = "iMediafairy"
+CHANNEL_ID = "-1002952378946"
+CHANNEL_URL = "https://t.me/MediafairyCh"
+# 0 = unlimited (tanpa batas harian). Cooldown tetap berlaku.
+FREE_DAILY_LIMIT = "0"
+COOLDOWN_MS = "60000"
+# Maksimal 25: free plan membatasi 50 subrequest per eksekusi Worker.
+BATCH_SIZE = "25"
+CONVERT_BATCH = "25"
+BROADCAST_BATCH = "25"
+# Kosongkan untuk mematikan notifikasi grup.
+GROUP_ID = ""
+DONATION_QRIS_URL = ""
+WEBHOOK_PATH = "/webhook"
