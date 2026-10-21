@@ -35,6 +35,13 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
   lagi muncul untuk user yang sudah lolos verifikasi.
 - **Daftar negara urut A–Z** berdasarkan nama negara (Argentina … Vietnam), dibagi
   3 halaman berisi 20 negara, plus tombol **🎲 Semua Negara**.
+- **Stiker loading saat generate.** Saat menekan tombol negara, bot mengirim satu stiker
+  acak dari [set `mfload`](https://t.me/addstickers/mfload) sebagai penanda proses, lalu
+  **menghapusnya** tepat sebelum token dikirim — jadi chat tetap bersih. Loading ini
+  **hanya pada generate**: convert, menu, `/start`, dan pesan lain tetap instan. Bila stok
+  kosong, balasan tetap instan tanpa stiker. Bila stiker gagal terkirim, bot otomatis
+  kembali memakai teks *"🔄 Memverifikasi…"*. Atur durasi lewat `LOADING_MS`, matikan
+  dengan `LOADING_MS=0`.
 - **Convert otomatis menyaring:**
   1. cookie mati (gagal ambil token) → dibuang
   2. cookie hidup tapi `Next Billing` sudah lewat → dibuang
@@ -58,6 +65,8 @@ Non-rahasia ada di `wrangler.toml` (`[vars]`). Rahasia disimpan sebagai Worker s
 | `BATCH_SIZE` | `25` | akun divalidasi per cron (maks 25) |
 | `CONVERT_BATCH` | `25` | akun diproses per file convert (maks 25) |
 | `BROADCAST_BATCH` | `25` | user per run broadcast (maks 25) |
+| `LOADING_MS` | `10000` | durasi stiker loading saat generate (ms), `0` = mati |
+| `LOADING_STICKERS` | `mfload` | nama set stiker dari `t.me/addstickers/<nama>` |
 | `GROUP_ID` | *(kosong)* | isi bila ingin notifikasi generate ke grup |
 | `WEBHOOK_PATH` | `/webhook` | |
 | `BOT_TOKEN`, `SECRET_TOKEN`, `SETUP_KEY` | — | **secret**, jangan commit |

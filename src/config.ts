@@ -26,6 +26,9 @@ export function readConfig(env: Env): Config {
     BATCH_SIZE: clamp(toInt(env.BATCH_SIZE, 25), 1, 25),
     CONVERT_BATCH: clamp(toInt(env.CONVERT_BATCH, 25), 1, 25),
     BROADCAST_BATCH: clamp(toInt(env.BROADCAST_BATCH, 25), 1, 25),
+    // Stiker loading pada generate. 0 = mati (tanpa stiker & tanpa jeda).
+    LOADING_MS: clamp(toInt(env.LOADING_MS, 10000), 0, 60000),
+    LOADING_STICKERS: (env.LOADING_STICKERS ?? 'mfload').trim(),
     WEBHOOK_PATH: env.WEBHOOK_PATH || '/webhook',
     SECRET_TOKEN: env.SECRET_TOKEN || '',
     SETUP_KEY: env.SETUP_KEY || '',

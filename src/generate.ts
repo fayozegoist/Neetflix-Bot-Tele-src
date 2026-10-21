@@ -4,6 +4,8 @@ import { adminContact, escapeHtml } from './telegram';
 import { getStats, isUnlimited, remainingQuota } from './stats';
 import { extractCookieDict, extractMetadata, fetchNfToken, maskEmail } from './netflix';
 import { resolveCountry } from './countries';
+import { startLoading } from './loading';
+import type { Loading } from './loading';
 
 const MAX_RANDOM_ATTEMPTS = 5;
 
@@ -63,6 +65,10 @@ export async function processGeneration(
   const verifyMsg =
     `🔄 Memverifikasi${countryFilter ? ` dengan filter Negara: <b>${countryLabel}</b>` : ''}... mohon tunggu.`;
 
+  // Stiker loading (hanya pada generate). Dinyalakan SETELAH cek stok lolos,
+  // supaya balasan "Stock Habis" tetap instan tanpa jeda 10 detik.
+  let loading: Loading | null = null;
+
   try {
     const vault = (await bot.kv.getVault()) || [];
     let nfToken: string | null = null;
@@ -83,7 +89,9 @@ export async function processGeneration(
       return;
     }
 
-    await bot.send(chatId, verifyMsg);
+    loading = await startLoading(bot, chatId);
+    // Bila stiker gagal terkirim, pakai indikator teks seperti sebelumnya.
+    if (!loading.shown) await bot.send(chatId, verifyMsg);
 
     let success = false;
     let accountsRemoved = 0;
@@ -122,6 +130,7 @@ export async function processGeneration(
     }
 
     if (!success) {
+      if (loading) await loading.finish();
       await bot.send(
         chatId,
         `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +
@@ -159,6 +168,8 @@ export async function processGeneration(
       `⏳ <b>Expires:</b> <code>${expDate}</code>\n\n` +
       `<b>MEDIAFAIRY Netflix Token</b>`;
 
+    // Stiker dihapus lebih dulu, baru token dikirim.
+    if (loading) await loading.finish();
     await bot.send(chatId, premiumOutput);
 
     if (!isAdmin) {
@@ -179,6 +190,11 @@ export async function processGeneration(
       }
     }
   } catch (e) {
+    if (loading) await loading.finish();
     await bot.send(chatId, `❌ <b>Terjadi Kesalahan:</b>\n<code>${escapeHtml((e as Error).message)}</code>`);
+  } finally {
+    // Jaring pengaman untuk semua jalur `return` dini. Idempoten, jadi tidak
+    // akan menghapus dua kali.
+    if (loading) await loading.finish();
   }
 }

@@ -11,6 +11,8 @@ export interface Env {
   BATCH_SIZE?: string;
   CONVERT_BATCH?: string;
   BROADCAST_BATCH?: string;
+  LOADING_MS?: string;
+  LOADING_STICKERS?: string;
   WEBHOOK_PATH?: string;
   SECRET_TOKEN?: string;
   SETUP_KEY?: string;
@@ -30,6 +32,10 @@ export interface Config {
   BATCH_SIZE: number;
   CONVERT_BATCH: number;
   BROADCAST_BATCH: number;
+  /** Durasi stiker loading saat generate (ms). 0 = mati. */
+  LOADING_MS: number;
+  /** Nama set stiker Telegram, mis. "mfload" dari t.me/addstickers/mfload. */
+  LOADING_STICKERS: string;
   WEBHOOK_PATH: string;
   SECRET_TOKEN: string;
   SETUP_KEY: string;

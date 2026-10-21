@@ -29,6 +29,10 @@ COOLDOWN_MS = "60000"
 BATCH_SIZE = "25"
 CONVERT_BATCH = "25"
 BROADCAST_BATCH = "25"
+# Stiker loading saat generate (hanya generate, bukan convert/menu).
+# Nama set diambil dari t.me/addstickers/<nama>. 0 = mati.
+LOADING_MS = "10000"
+LOADING_STICKERS = "mfload"
 # Kosongkan untuk mematikan notifikasi grup.
 GROUP_ID = ""
 DONATION_QRIS_URL = ""
