@@ -86,7 +86,7 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
     const country = data.slice(3) || 'global';
     const username = callbackQuery.from.username ? `@${callbackQuery.from.username}` : 'TanpaUsername';
     await bot.api('deleteMessage', { chat_id: chatId, message_id: messageId });
-    await processGeneration(bot, chatId, userId, username, isAdmin, null, 'random', country);
+    await processGeneration(bot, chatId, userId, username, isAdmin, country);
     return;
   }
 }

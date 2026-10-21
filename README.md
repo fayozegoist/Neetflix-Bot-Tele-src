@@ -11,8 +11,9 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
 
 | Fitur | Keterangan |
 |---|---|
-| 🔑 Generate Token | `/gen <teks cookie>` atau `/gen <ID vault>` |
-| 🎲 Generate Random by Negara | 60 negara, tombol beremoji bendera, 3 halaman |
+| 🔑 Generate Token | tombol menu → pilih negara → token dikirim |
+| 🎲 Generate Random | tombol menu → pilih negara → token dikirim |
+| 🌍 Daftar negara | 60 negara urut **A–Z**, tombol beremoji bendera, **3 halaman** (@20) |
 | 📁 Vault | penyimpanan akun, dipaginasi |
 | 📊 Cek Limit | status kuota + sisa cooldown |
 | 🔄 Convert (admin) | `/conv <teks>` atau kirim file `.txt` (single & bulk) |
@@ -25,8 +26,12 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
   generate berhasil**. Gagal karena stok habis, cookie mati, atau input salah **tidak**
   menghabiskan jeda. Admin bebas cooldown.
   (Set `FREE_DAILY_LIMIT=0` untuk mode unlimited. Nilai > 0 mengaktifkan batas harian.)
+- **Generate hanya lewat tombol menu.** Command `/gen` sudah **dihapus** — tidak ada lagi
+  input cookie manual. Alurnya: tekan **🔑 Generate Token** (atau **🎲 Generate Random**)
+  → pilih negara → token dikirim. Yang masih mengetik `/gen` akan diarahkan ke menu.
 - **Wajib join channel** `@MediafairyCh` lalu tekan **Verifikasi**. Admin dikecualikan.
-- **Generate by negara** (bukan lagi by benua/region).
+- **Daftar negara urut A–Z** berdasarkan nama negara (Argentina … Vietnam), dibagi
+  3 halaman berisi 20 negara, plus tombol **🎲 Semua Negara**.
 - **Convert otomatis menyaring:**
   1. cookie mati (gagal ambil token) → dibuang
   2. cookie hidup tapi `Next Billing` sudah lewat → dibuang

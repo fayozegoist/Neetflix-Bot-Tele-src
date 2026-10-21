@@ -6,13 +6,18 @@ import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
 import { countryMarkup, mainMenu } from '../menu';
 import { sendVaultPage } from '../vault';
 import { handleDonasi } from '../donation';
-import { processGeneration } from '../generate';
 import { processConvert } from '../convert';
 import { BROADCAST_BATCH, processBroadcastBatch } from '../broadcast';
 
 const deny = (bot: Bot, chatId: number, text: string) => bot.send(chatId, text);
 
 const cooldownSec = (bot: Bot): number => Math.round(bot.cfg.COOLDOWN_MS / 1000);
+
+/** Teks pembuka menu pilih negara (satu-satunya jalur generate). */
+const COUNTRY_MENU_TEXT =
+  '🌍 <b>Pilih Negara Akun</b>\n\n' +
+  'Tekan tombol negara untuk generate token secara acak dari stok negara tersebut.\n\n' +
+  'Ingin dari negara mana saja? Pilih <b>🎲 Semua Negara</b>.';
 
 export async function handleMessage(bot: Bot, message: TgMessage): Promise<void> {
   const chatId = message.chat.id;
@@ -142,7 +147,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '🔑 Generate Token') {
-    await bot.send(chatId, '🛠️ <b>Menu Generate Token</b>\n\n<b>Cara Penggunaan:</b>1. Dari teks manual: Kirim <code>/gen [teks_cookie]</code>2. Dari ID Vault: Kirim <code>/gen [nomor_id]</code>');
+    await bot.send(chatId, COUNTRY_MENU_TEXT, { markup: countryMarkup(0) });
     return;
   }
 
@@ -217,7 +222,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '🎲 Generate Random') {
-    await bot.send(chatId, '🌍 <b>Pilih Negara Akun:</b>\nSilakan pilih negara untuk akun yang ingin kamu generate.', { markup: countryMarkup(0) });
+    await bot.send(chatId, COUNTRY_MENU_TEXT, { markup: countryMarkup(0) });
     return;
   }
 
@@ -227,13 +232,15 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     return;
   }
 
-  if (/^\/gen(\s|$)/.test(text)) {
-    const inputData = text.replace(/^\/gen/, '').trim();
-    if (!inputData) {
-      await bot.send(chatId, '❌ <b>Format salah.</b>\nGunakan: <code>/gen [teks/nomor_id]</code>');
-      return;
-    }
-    await processGeneration(bot, chatId, userId, username, isAdmin, inputData, 'gen', null);
+  // Command lama yang sudah dihapus: arahkan ke menu tombol, jangan didiamkan.
+  if (/^\/(gen|generate)\b/i.test(text)) {
+    await bot.send(
+      chatId,
+      'ℹ️ Command <code>/gen</code> sudah <b>tidak tersedia</b>.\n\n' +
+        'Sekarang generate token lewat <b>tombol menu</b>: tekan <b>🔑 Generate Token</b> ' +
+        'lalu pilih negaranya.',
+      { markup: mainMenu(isAdmin) }
+    );
     return;
   }
 }

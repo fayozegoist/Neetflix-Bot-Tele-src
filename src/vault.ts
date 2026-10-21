@@ -35,7 +35,7 @@ export async function sendVaultPage(
     const memberSince = v.memberSince || 'Tidak diketahui';
     const nextBilling = v.nextBilling || 'Tidak diketahui';
     const flag = v.country ? `${flagEmoji(v.country)} ` : '';
-    msg += `<b>ID:</b> <code>${v.id}</code>\n📧 <code>${escapeHtml(v.email)}</code>\n${flag}🌍 Region: ${escapeHtml(region)} | 💎 Plan: ${escapeHtml(plan)}\n🗓 Member: ${escapeHtml(memberSince)} | ⏳ Next Bill: ${escapeHtml(nextBilling)}\n⚙️ Ketik: <code>/gen ${v.id}</code>\n\n`;
+    msg += `<b>ID:</b> <code>${v.id}</code>\n📧 <code>${escapeHtml(v.email)}</code>\n${flag}🌍 Region: ${escapeHtml(region)} | 💎 Plan: ${escapeHtml(plan)}\n🗓 Member: ${escapeHtml(memberSince)} | ⏳ Next Bill: ${escapeHtml(nextBilling)}\n\n`;
   });
 
   const buttons: InlineButton[] = [];

@@ -1,5 +1,5 @@
 import type { Bot } from './bot';
-import type { CountryFilter, GenAction, VaultEntry } from './types';
+import type { CountryFilter, VaultEntry } from './types';
 import { adminContact, escapeHtml } from './telegram';
 import { getStats, isUnlimited, remainingQuota } from './stats';
 import { extractCookieDict, extractMetadata, fetchNfToken, maskEmail } from './netflix';
@@ -19,14 +19,19 @@ export function filterVaultByCountry(vault: VaultEntry[], country: CountryFilter
   return vault.filter((v) => entryCountry(v) === country);
 }
 
+/**
+ * Generate token dari Vault secara acak.
+ *
+ * Satu-satunya jalur generate: user menekan tombol menu -> memilih negara
+ * (atau "Semua Negara") -> fungsi ini dipanggil dengan `countryFilter`.
+ * Command `/gen` sudah dihapus, jadi tidak ada input cookie manual.
+ */
 export async function processGeneration(
   bot: Bot,
   chatId: number,
   userId: number,
   username: string,
   isAdmin: boolean,
-  inputData: string | null,
-  action: GenAction,
   countryFilter: CountryFilter | null
 ): Promise<void> {
   const stats = await getStats(bot, userId);
@@ -64,96 +69,71 @@ export async function processGeneration(
     let expires: number | null = null;
     let meta: ReturnType<typeof extractMetadata> | null = null;
 
-    if (action === 'random') {
-      const filteredVault = filterVaultByCountry(vault, countryFilter);
+    const filteredVault = filterVaultByCountry(vault, countryFilter);
 
-      // Cek stok DULUAN. Bila tidak ada akun, user tidak dihukum cooldown
-      // karena memang tidak ada yang bisa dilayani.
-      if (filteredVault.length === 0) {
-        const scope = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
-        await bot.send(
-          chatId,
-          `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan negara <b>${scope}</b> di Vault saat ini.\n\n` +
-            `<i>Tidak ada cooldown yang terpakai — silakan coba negara lain.</i>`
-        );
-        return;
-      }
+    // Cek stok DULUAN. Bila tidak ada akun, user tidak dihukum cooldown
+    // karena memang tidak ada yang bisa dilayani.
+    if (filteredVault.length === 0) {
+      const scope = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
+      await bot.send(
+        chatId,
+        `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan negara <b>${scope}</b> di Vault saat ini.\n\n` +
+          `<i>Tidak ada cooldown yang terpakai — silakan coba negara lain.</i>`
+      );
+      return;
+    }
 
-      await bot.send(chatId, verifyMsg);
+    await bot.send(chatId, verifyMsg);
 
-      let success = false;
-      let accountsRemoved = 0;
-      const deadIds = new Set<number>();
+    let success = false;
+    let accountsRemoved = 0;
+    const deadIds = new Set<number>();
 
-      for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
-        if (filteredVault.length === 0) break;
+    for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
+      if (filteredVault.length === 0) break;
 
-        const randomIdx = Math.floor(Math.random() * filteredVault.length);
-        const candidate = filteredVault[randomIdx];
-        const cookieDict = extractCookieDict(candidate.rawText);
+      const randomIdx = Math.floor(Math.random() * filteredVault.length);
+      const candidate = filteredVault[randomIdx];
+      const cookieDict = extractCookieDict(candidate.rawText);
 
-        if (!cookieDict.NetflixId) {
-          filteredVault.splice(randomIdx, 1);
-          deadIds.add(candidate.id);
-          accountsRemoved++;
-          continue;
-        }
-
-        try {
-          const tokenData = await fetchNfToken(cookieDict.NetflixId);
-          nfToken = tokenData.token;
-          expires = tokenData.expires;
-          meta = extractMetadata(candidate.rawText);
-          success = true;
-          break;
-        } catch {
-          filteredVault.splice(randomIdx, 1);
-          deadIds.add(candidate.id);
-          accountsRemoved++;
-        }
-      }
-
-      if (deadIds.size > 0) {
-        await bot.kv.setVault(vault.filter((v) => !deadIds.has(v.id)));
-      }
-
-      if (!success) {
-        await bot.send(
-          chatId,
-          `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +
-            `<i>Tidak ada cooldown yang terpakai.</i>`
-        );
-        return;
-      }
-    } else {
-      let finalCookieText = inputData || '';
-      if (/^\d+$/.test(finalCookieText)) {
-        const savedCookie = vault.find((v) => v.id == Number(finalCookieText));
-        if (!savedCookie) {
-          await bot.send(chatId, `❌ Cookie dengan ID <b>${finalCookieText}</b> tidak ditemukan.`);
-          return;
-        }
-        finalCookieText = savedCookie.rawText;
-      }
-
-      const cookieDict = extractCookieDict(finalCookieText);
       if (!cookieDict.NetflixId) {
-        await bot.send(chatId, '❌ <b>Gagal:</b> <code>NetflixId</code> tidak ditemukan dalam input.');
-        return;
+        filteredVault.splice(randomIdx, 1);
+        deadIds.add(candidate.id);
+        accountsRemoved++;
+        continue;
       }
 
-      await bot.send(chatId, verifyMsg);
+      try {
+        const tokenData = await fetchNfToken(cookieDict.NetflixId);
+        nfToken = tokenData.token;
+        expires = tokenData.expires;
+        meta = extractMetadata(candidate.rawText);
+        success = true;
+        break;
+      } catch {
+        filteredVault.splice(randomIdx, 1);
+        deadIds.add(candidate.id);
+        accountsRemoved++;
+      }
+    }
 
-      const tokenData = await fetchNfToken(cookieDict.NetflixId);
-      nfToken = tokenData.token;
-      expires = tokenData.expires;
-      meta = extractMetadata(finalCookieText);
+    if (deadIds.size > 0) {
+      await bot.kv.setVault(vault.filter((v) => !deadIds.has(v.id)));
+    }
+
+    if (!success) {
+      await bot.send(
+        chatId,
+        `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +
+          `<i>Tidak ada cooldown yang terpakai.</i>`
+      );
+      return;
     }
 
     if (!nfToken || !expires || !meta) throw new Error('Gagal mengambil token.');
 
     // --- Cooldown HANYA dicatat setelah token benar-benar berhasil dibuat ---
-    // Jadi gagal karena stok habis, cookie mati, atau input salah TIDAK
+    // Jadi gagal karena stok habis atau semua cookie mati TIDAK
     // menghabiskan jeda 1 menit user.
     if (!isAdmin) {
       stats.lastGen = Date.now();

@@ -116,8 +116,5 @@ export interface TgUpdate {
   callback_query?: TgCallbackQuery;
 }
 
-export type RegionFilter = 'sea' | 'asia' | 'europe' | 'america' | 'global';
-export type GenAction = 'gen' | 'random';
-
 /** Kode negara ISO2 (mis. 'ID'), atau 'global' untuk semua negara. */
 export type CountryFilter = string;

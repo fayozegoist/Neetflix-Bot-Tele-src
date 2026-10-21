@@ -21,7 +21,13 @@ export const COUNTRY_NAMES: Record<string, string> = {
   ZA: 'South Africa',
 };
 
-export const COUNTRY_CODES: string[] = Object.keys(COUNTRY_NAMES);
+/**
+ * Kode negara, diurutkan A-Z berdasarkan NAMA negara (bukan kode ISO2),
+ * supaya daftar di menu enak dibaca. 60 negara -> 3 halaman @20.
+ */
+export const COUNTRY_CODES: string[] = Object.keys(COUNTRY_NAMES).sort((a, b) =>
+  COUNTRY_NAMES[a].localeCompare(COUNTRY_NAMES[b], 'en', { sensitivity: 'base' })
+);
 
 const ALIASES: Record<string, string[]> = {
   AE: ['uae'], US: ['usa', 'united states of america', 'america'],
