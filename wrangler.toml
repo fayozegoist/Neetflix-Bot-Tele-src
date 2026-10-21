@@ -39,7 +39,8 @@ BROADCAST_BATCH = "25"
 # Nama set diambil dari t.me/addstickers/<nama>. 0 = mati.
 LOADING_MS = "10000"
 LOADING_STICKERS = "mfload"
-# Kosongkan untuk mematikan notifikasi grup.
-GROUP_ID = ""
+# Grup "RecordBot" (@MFrecordbot) — tujuan catatan tiap generate user biasa.
+# Bot @MFnftokenBot sudah admin di sana. Kosongkan untuk mematikan.
+GROUP_ID = "-1003744140971"
 DONATION_QRIS_URL = ""
 WEBHOOK_PATH = "/webhook"

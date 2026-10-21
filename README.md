@@ -66,6 +66,11 @@ ribuan akun.
   `/del` tetap menghapus permanen.
 - **Upload ulang file yang sama tidak menggandakan akun.** Dedupe memakai
   `cookie_hash` (128 bit pertama SHA-256 dari `NetflixId`) dengan UNIQUE index.
+- **Catatan generate ke grup RecordBot.** Setiap generate oleh user biasa dikirim ke
+  grup [@MFrecordbot](https://t.me/MFrecordbot) (`GROUP_ID`): user, id, email
+  **disamarkan**, region, dan plan — **tanpa token maupun link login**, jadi grup itu
+  tidak bisa dipakai mengambil token orang. Generate oleh admin **tidak** dicatat supaya
+  grup tidak terisi hasil uji coba. Kosongkan `GROUP_ID` untuk mematikan.
 - **Login: `/admin`** (kunci `ADMIN_WEB_KEY`, lewat `?key=` atau header `x-admin-key`).
   Halaman ini untuk **upload massal** file akun (klien memotong file per 30 KB lalu
   mengirim berkali-kali, jadi file besar pun aman), melihat rekap per negara, memicu
@@ -108,7 +113,7 @@ Non-rahasia ada di `wrangler.toml` (`[vars]`). Rahasia disimpan sebagai Worker s
 | `LOADING_MS` | `10000` | durasi stiker loading saat generate (ms), `0` = mati |
 | `LOADING_STICKERS` | `mfload` | nama set stiker dari `t.me/addstickers/<nama>` |
 | `DEAD_RETENTION_MS` | `604800000` | simpan baris mati selama ini sebelum dihapus permanen (7 hari) |
-| `GROUP_ID` | *(kosong)* | isi bila ingin notifikasi generate ke grup |
+| `GROUP_ID` | `-1003744140971` | grup **RecordBot** (@MFrecordbot): catatan tiap generate user biasa. Kosong = mati |
 | `WEBHOOK_PATH` | `/webhook` | |
 | `BOT_TOKEN`, `SECRET_TOKEN`, `SETUP_KEY`, `ADMIN_WEB_KEY` | — | **secret**, jangan commit |
 
