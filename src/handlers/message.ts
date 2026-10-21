@@ -32,7 +32,8 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     return;
   }
 
-  if (!isAdmin) await registerUser(bot, userId, username);
+  let isNewUser = false;
+  if (!isAdmin) isNewUser = await registerUser(bot, userId, username);
 
   // --- Gate join channel (wajib, admin exempt) ---
   if (!isAdmin && bot.cfg.CHANNEL_ID) {
@@ -134,12 +135,32 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '/start') {
+    // Sapaan dibedakan: admin, user baru (baru lolos verifikasi), dan user
+    // lama. User yang sudah lolos gate TIDAK lagi dituduh "wajib join".
+    let head: string;
+    let statusLine: string;
+
+    if (isAdmin) {
+      head = '👋 <b>Selamat datang, Admin!</b>';
+      statusLine = '👑 <b>Akses Admin</b> — bebas cooldown, tanpa batas.';
+    } else if (isNewUser) {
+      head = '👋 <b>Selamat datang di MEDIAFAIRY Netflix Token!</b>';
+      statusLine = bot.cfg.CHANNEL_ID
+        ? '✅ <b>Verifikasi channel berhasil</b> — akun kamu sudah aktif.'
+        : '✅ <b>Akun kamu sudah aktif.</b>';
+    } else {
+      head = '👋 <b>Selamat datang kembali!</b>';
+      statusLine = bot.cfg.CHANNEL_ID
+        ? '✅ <b>Channel sudah kamu ikuti</b> — siap generate lagi.'
+        : '✅ <b>Akun kamu sudah aktif.</b>';
+    }
+
     await bot.send(
       chatId,
-      `👋 <b>Selamat datang di MEDIAFAIRY Netflix Token!</b>\n\n` +
+      `${head}\n\n` +
         `Bot ini dapat memberikan Anda <i>Token Auto-Login Netflix</i> secara instan.\n\n` +
-        `✨ <b>Tanpa batas kuota</b> — dengan jeda <b>${cooldownSec(bot)} detik</b> antar generate.\n\n` +
-        `📢 Wajib <b>join channel</b> kami & verifikasi sebelum bisa generate.\n\n` +
+        `✨ <b>Tanpa batas kuota</b> — dengan jeda <b>${cooldownSec(bot)} detik</b> antar generate.\n` +
+        `${statusLine}\n\n` +
         `👇 <b>Silakan pilih menu di bawah ini:</b>`,
       { markup: mainMenu(isAdmin) }
     );

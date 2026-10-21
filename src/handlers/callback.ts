@@ -40,9 +40,16 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
       text: fresh ? '✅ Verifikasi berhasil!' : '✅ Sudah terverifikasi',
       show_alert: false,
     });
-    const msg = fresh
-      ? '✅ <b>Verifikasi Berhasil!</b>\nSelamat datang! Silakan pilih menu di bawah ini:'
-      : '✅ <b>Verifikasi Berhasil!</b>\nSelamat datang kembali!';
+    const cooldownSec = Math.round(bot.cfg.COOLDOWN_MS / 1000);
+    const msg =
+      `✅ <b>Verifikasi Berhasil!</b>\n\n` +
+      (fresh
+        ? '👋 <b>Selamat datang di MEDIAFAIRY Netflix Token!</b>\n'
+        : '👋 <b>Selamat datang kembali!</b>\n') +
+      `Bot ini dapat memberikan Anda <i>Token Auto-Login Netflix</i> secara instan.\n\n` +
+      `✨ <b>Tanpa batas kuota</b> — dengan jeda <b>${cooldownSec} detik</b> antar generate.\n` +
+      `✅ <b>Channel sudah kamu ikuti</b> — siap generate.\n\n` +
+      `👇 <b>Silakan pilih menu di bawah ini:</b>`;
     await bot.send(chatId, msg, { markup: mainMenu(false) });
     return;
   }

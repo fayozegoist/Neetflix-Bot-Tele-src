@@ -29,6 +29,10 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
   input cookie manual. Alurnya: tekan **🎲 Generate Token** → pilih negara → token dikirim.
   Yang masih mengetik `/gen` akan diarahkan ke menu.
 - **Wajib join channel** `@MediafairyCh` lalu tekan **Verifikasi**. Admin dikecualikan.
+- **Sapaan `/start` dibedakan 3 versi:** belum join → pesan terkunci + tombol Verifikasi;
+  baru join → *"Selamat datang"* + status terverifikasi; user lama → *"Selamat datang
+  kembali"*; admin → sapaan admin (bebas cooldown). Baris *"wajib join channel"* tidak
+  lagi muncul untuk user yang sudah lolos verifikasi.
 - **Daftar negara urut A–Z** berdasarkan nama negara (Argentina … Vietnam), dibagi
   3 halaman berisi 20 negara, plus tombol **🎲 Semua Negara**.
 - **Convert otomatis menyaring:**

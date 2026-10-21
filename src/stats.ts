@@ -34,10 +34,14 @@ export function remainingQuota(stats: Stats, freeDailyLimit: number): number {
   return (base > 0 ? base : 0) + (stats.extra || 0);
 }
 
-export async function registerUser(bot: Bot, userId: number, username: string): Promise<void> {
+/**
+ * Daftarkan user bila belum ada.
+ * Return `true` bila ini pertama kalinya user terlihat (user baru).
+ */
+export async function registerUser(bot: Bot, userId: number, username: string): Promise<boolean> {
   const users = (await bot.kv.getUsers()) || [];
-  if (!users.find((u) => u.id === userId)) {
-    users.push({ id: userId, username, firstSeen: new Date().toISOString() });
-    await bot.kv.setUsers(users);
-  }
+  if (users.find((u) => u.id === userId)) return false;
+  users.push({ id: userId, username, firstSeen: new Date().toISOString() });
+  await bot.kv.setUsers(users);
+  return true;
 }
