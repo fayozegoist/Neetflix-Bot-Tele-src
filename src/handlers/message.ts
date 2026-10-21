@@ -5,6 +5,8 @@ import { getStats, getWIBDate, nowWIB, registerUser } from '../stats';
 import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
 import { countryMarkup, mainMenu } from '../menu';
 import { sendVaultPage } from '../vault';
+import { loadBreaker } from '../breaker';
+import { readStats } from '../vaultstats';
 import { handleDonasi } from '../donation';
 import { processConvert } from '../convert';
 import { BROADCAST_BATCH, processBroadcastBatch } from '../broadcast';
@@ -54,7 +56,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
 
   if (text === '/clearvault') {
     if (!isAdmin) return void (await deny(bot, chatId, '⛔ <b>Akses Ditolak:</b> Anda bukan Admin.'));
-    await bot.kv.setVault([]);
+    await bot.vault.clear();
     await bot.send(chatId, '✅ <b>Berhasil:</b> Seluruh data pada Folder Vault Global telah dikosongkan.');
     return;
   }
@@ -66,14 +68,11 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
       await bot.send(chatId, '❌ Format salah. Gunakan: <code>/del [ID]</code>');
       return;
     }
-    const vault = (await bot.kv.getVault()) || [];
-    const initialLength = vault.length;
-    const filtered = vault.filter((v) => v.id !== delId);
-    if (filtered.length === initialLength) {
+    const removed = await bot.vault.deleteById(delId);
+    if (!removed) {
       await bot.send(chatId, `❌ Akun ID <b>${delId}</b> tidak ditemukan.`);
       return;
     }
-    await bot.kv.setVault(filtered);
     await bot.send(chatId, `✅ <b>Berhasil:</b> Akun ID <b>${delId}</b> dihapus.`);
     return;
   }
@@ -113,7 +112,9 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (isAdmin && text === '/stats') {
-    const vault = (await bot.kv.getVault()) || [];
+    const stats = await readStats(bot);
+    const counts = stats.counts;
+    const breaker = await loadBreaker(bot);
     const users = (await bot.kv.getUsers()) || [];
     let verified = 0;
     const statKeys = await bot.kv.listKeys('stats_');
@@ -124,12 +125,16 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     await bot.send(
       chatId,
       `📊 <b>STATISTIK SERVER</b>\n\n` +
-        `📁 Vault: <b>${vault.length}</b> akun\n` +
+        `📁 Vault siap pakai: <b>${counts.active}</b> akun\n` +
+        `⏳ Menunggu validasi: <b>${counts.pending}</b> akun\n` +
+        `🗑️ Dibuang (cookie mati/billing): <b>${counts.dead}</b> akun\n` +
         `👥 User terdaftar: <b>${users.length}</b>\n` +
         `✅ Terverifikasi join: <b>${verified}</b> user\n` +
-        `🗑️ Auto-validasi: batch ${bot.cfg.BATCH_SIZE} akun per run\n` +
-        `🔄 Convert batch: ${bot.cfg.CONVERT_BATCH} akun per file\n` +
-        `🕐 Waktu: ${nowWIB()}`
+        `⚙️ Laju auto-validasi: <b>${breaker.perRun}</b> akun/run` +
+        (breaker.hardPaused ? ' 🛑 <i>(dihentikan sementara)</i>' : '') +
+        `\n🔄 Convert batch: ${bot.cfg.CONVERT_BATCH} akun per file\n` +
+        `🕐 Waktu: ${nowWIB()}\n\n` +
+        `<i>Upload massal & progress: buka halaman /admin.</i>`
     );
     return;
   }
@@ -193,8 +198,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '📁 Vault Tersimpan') {
-    const vault = (await bot.kv.getVault()) || [];
-    await sendVaultPage(bot, chatId, vault, 0);
+    await sendVaultPage(bot, chatId, 0);
     return;
   }
 

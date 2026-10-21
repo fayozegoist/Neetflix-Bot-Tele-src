@@ -1,16 +1,21 @@
 import type { Bot } from './bot';
+import type { NewVaultRow } from './vaultstore';
 import { escapeHtml } from './telegram';
 import { sleep } from './stats';
-import { extractCookieDict, extractMetadata, fetchNfToken, maskEmail } from './netflix';
+import { extractCookieDict, extractMetadata, fetchNfToken, isDeadFailure, maskEmail } from './netflix';
 import { splitAccounts } from './parse';
 import { isBillingExpired } from './dateparse';
 import { resolveCountry } from './countries';
+import { cookieHash } from './hash';
+import { refreshStats } from './vaultstats';
 
 const DELAY_MS = 150;
 
 export interface ConvertSummary {
   chunks: number;
   added: number;
+  duplicate: number;
+  pending: number;
   dead: number;
   billingExpired: number;
   noCookie: number;
@@ -21,10 +26,12 @@ export interface ConvertSummary {
  * Memproses teks cookie (1 atau banyak akun) menjadi Vault.
  *
  * Aturan:
- *  - cookie mati (gagal fetch token)        -> dibuang
- *  - Next Billing sudah lewat               -> dibuang
- *  - hanya yang aktif & billing aman        -> masuk Vault
- *  - field "Expires" diabaikan (itu masa link login, bukan masa cookie)
+ *  - cookie mati (Netflix menjawab normal tanpa token)  -> dibuang
+ *  - Next Billing sudah lewat                           -> dibuang
+ *  - aktif & billing aman                               -> masuk Vault sebagai `active`
+ *  - ambigu (rate-limit / 5xx / timeout)                -> masuk sebagai `pending`,
+ *    divalidasi ulang oleh cron; akun TIDAK dibuang dan tidak bisa di-generate dulu
+ *  - field "Expires" diabaikan (masa link login, bukan masa cookie)
  */
 export async function processConvert(bot: Bot, textData: string, chatId: number): Promise<void> {
   try {
@@ -33,13 +40,10 @@ export async function processConvert(bot: Bot, textData: string, chatId: number)
     const truncated = allChunks.length > limit;
     const chunks = truncated ? allChunks.slice(0, limit) : allChunks;
 
-    let addedCount = 0;
     let deadCount = 0;
     let billingExpiredCount = 0;
     let noCookieCount = 0;
-
-    const vault = (await bot.kv.getVault()) || [];
-    let startId = vault.length > 0 ? vault[vault.length - 1].id + 1 : 1;
+    const rows: NewVaultRow[] = [];
 
     await bot.send(
       chatId,
@@ -56,12 +60,28 @@ export async function processConvert(bot: Bot, textData: string, chatId: number)
       }
 
       const meta = extractMetadata(chunk);
+      const row = {
+        cookieHash: await cookieHash(dict.NetflixId),
+        rawText: chunk.trim(),
+        email: maskEmail(meta.email),
+        region: meta.region,
+        country: resolveCountry(meta.region) ?? null,
+        plan: meta.plan,
+        memberSince: meta.memberSince,
+        nextBilling: meta.nextBilling,
+      };
 
-      // 1) Validasi cookie — kalau gagal, akun sudah tidak bisa dipakai.
+      // 1) Validasi cookie.
       try {
         await fetchNfToken(dict.NetflixId);
-      } catch {
-        deadCount++;
+      } catch (e) {
+        if (isDeadFailure(e)) {
+          deadCount++;
+        } else {
+          // Rate-limit / timeout BUKAN bukti mati: simpan sebagai `pending`
+          // supaya cron memvalidasinya nanti. Tidak dibuang, tidak dilayani dulu.
+          rows.push({ ...row, status: 'pending' });
+        }
         await sleep(DELAY_MS);
         continue;
       }
@@ -73,36 +93,48 @@ export async function processConvert(bot: Bot, textData: string, chatId: number)
         continue;
       }
 
-      // 3) Simpan ke Vault.
-      vault.push({
-        id: startId++,
-        rawText: chunk.trim(),
-        email: maskEmail(meta.email),
-        region: meta.region,
-        country: resolveCountry(meta.region) ?? undefined,
-        plan: meta.plan,
-        memberSince: meta.memberSince,
-        nextBilling: meta.nextBilling,
-      });
-      addedCount++;
-
+      // 3) Simpan sebagai aktif.
+      rows.push({ ...row, status: 'active' });
       await sleep(DELAY_MS);
+    }
+
+    const inserted = rows.length > 0 ? await bot.vault.insertMany(rows) : 0;
+    const addedCount = rows.filter((r) => r.status === 'active').length;
+    const pendingCount = rows.filter((r) => r.status === 'pending').length;
+    const duplicate = rows.length - inserted;
+
+    let totalActive = 0;
+    try {
+      // Satu kali pindai tabel untuk menampilkan total setelah convert.
+      totalActive = (await refreshStats(bot)).counts.active;
+    } catch {
+      totalActive = addedCount;
     }
 
     let finalMsg = `✅ <b>Proses Convert Selesai!</b>\n\n`;
     finalMsg += `➕ <b>Masuk Vault (aktif):</b> ${addedCount} Akun\n`;
+    if (duplicate > 0) finalMsg += `♻️ <b>Dilewati (sudah ada di Vault):</b> ${duplicate} Akun\n`;
     if (deadCount > 0) finalMsg += `❌ <b>Dibuang (cookie mati):</b> ${deadCount} Akun\n`;
     if (billingExpiredCount > 0) {
       finalMsg += `⏳ <b>Dibuang (Next Billing lewat):</b> ${billingExpiredCount} Akun\n`;
     }
     if (noCookieCount > 0) finalMsg += `⚠️ <b>Dibuang (tidak ada NetflixId):</b> ${noCookieCount} Akun\n`;
-    if (truncated) {
-      finalMsg += `⚠️ <b>Catatan:</b> File berisi ${allChunks.length} akun, batch ini memproses ${chunks.length}. `
-        + `Sisa ${allChunks.length - chunks.length} akun tidak diproses — kirim ulang sisanya.\n`;
+    if (pendingCount > 0) {
+      finalMsg += `🌐 <b>Menunggu validasi ulang (Netflix membatasi):</b> ${pendingCount} Akun\n`;
     }
-    finalMsg += `\nTotal saat ini ada <b>${vault.length}</b> akun di Vault.`;
+    if (truncated) {
+      finalMsg +=
+        `⚠️ <b>Catatan:</b> File berisi ${allChunks.length} akun, batch ini memproses ${chunks.length}. ` +
+        `Sisa ${allChunks.length - chunks.length} akun tidak diproses — kirim ulang sisanya.\n`;
+    }
+    finalMsg += `\nTotal akun <b>siap dipakai</b> di Vault: <b>${totalActive}</b>.`;
+    if (pendingCount > 0) {
+      finalMsg +=
+        `\n\n🔁 <b>${pendingCount} akun tidak dibuang</b> — Netflix sedang membatasi, jadi belum bisa ` +
+        `dipastikan hidup atau mati. Akun itu masuk antrean dan akan divalidasi otomatis, ` +
+        `jadi tidak perlu kirim ulang.`;
+    }
 
-    if (addedCount > 0) await bot.kv.setVault(vault);
     await bot.send(chatId, finalMsg);
   } catch (e) {
     await bot.send(chatId, `❌ <b>Gagal memproses data:</b>\n\n<code>${escapeHtml((e as Error).message)}</code>`);

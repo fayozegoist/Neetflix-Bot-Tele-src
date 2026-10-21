@@ -155,22 +155,62 @@ function buildHeaders(netflixId: string): Record<string, string> {
   };
 }
 
-export async function fetchNfToken(netflixId: string): Promise<NfTokenData> {
-  const response = await fetch(`${API_URL}?${buildParams().toString()}`, {
-    headers: buildHeaders(netflixId),
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!response.ok) throw new Error(`Koneksi ditolak (Status: ${response.status})`);
+/**
+ * Jenis kegagalan saat mengambil token.
+ *
+ * - `dead`         : Netflix menjawab normal tapi tidak memberi token. Cookie
+ *                    sudah pasti tidak bisa dipakai -> aman untuk dihapus.
+ * - `inconclusive` : rate-limit (429), error server (5xx), timeout, koneksi
+ *                    putus, atau body bukan JSON. Cookie BELUM TENTU mati.
+ *
+ * Pembedaan ini penting: pada validasi massal, memperlakukan rate-limit sebagai
+ * "cookie mati" bisa menghapus ribuan akun yang sebenarnya sehat.
+ */
+export type NfFailureKind = 'dead' | 'inconclusive';
 
-  const data: unknown = await response.json().catch(() => {
-    throw new Error('Respon Netflix bukan JSON valid.');
-  });
+export class NfError extends Error {
+  readonly kind: NfFailureKind;
+  constructor(message: string, kind: NfFailureKind) {
+    super(message);
+    this.name = 'NfError';
+    this.kind = kind;
+  }
+}
+
+/** `true` hanya bila kegagalan membuktikan cookie sudah tidak bisa dipakai. */
+export function isDeadFailure(e: unknown): boolean {
+  return e instanceof NfError && e.kind === 'dead';
+}
+
+export async function fetchNfToken(netflixId: string): Promise<NfTokenData> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}?${buildParams().toString()}`, {
+      headers: buildHeaders(netflixId),
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch (e) {
+    throw new NfError(`Koneksi ke Netflix gagal: ${(e as Error).message}`, 'inconclusive');
+  }
+
+  if (!response.ok) {
+    // Termasuk 429 (rate limit) dan 5xx. TIDAK boleh dianggap cookie mati.
+    throw new NfError(`Koneksi ditolak (Status: ${response.status})`, 'inconclusive');
+  }
+
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new NfError('Respon Netflix bukan JSON valid.', 'inconclusive');
+  }
 
   const tokenData = (data as { value?: { account?: { token?: { default?: { token?: string; expires?: unknown } } } } })
     ?.value?.account?.token?.default;
 
   if (!tokenData || !tokenData.token) {
-    throw new Error('Struktur JSON ditolak. Node account/token/default tidak ditemukan.');
+    // Satu-satunya sinyal yang pasti: Netflix menjawab normal, tanpa token.
+    throw new NfError('Struktur JSON ditolak. Node account/token/default tidak ditemukan.', 'dead');
   }
 
   let expires = tokenData.expires as number | string;

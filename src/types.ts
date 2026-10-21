@@ -16,7 +16,10 @@ export interface Env {
   WEBHOOK_PATH?: string;
   SECRET_TOKEN?: string;
   SETUP_KEY?: string;
+  ADMIN_WEB_KEY?: string;
+  DEAD_RETENTION_MS?: string;
   Neetflix_KV: KVNamespace;
+  VAULT_DB: D1Database;
 }
 
 export interface Config {
@@ -39,6 +42,10 @@ export interface Config {
   WEBHOOK_PATH: string;
   SECRET_TOKEN: string;
   SETUP_KEY: string;
+  /** Kunci halaman /admin (upload massal + progress). */
+  ADMIN_WEB_KEY: string;
+  /** Umur baris `dead` sebelum dipangkas dari D1. */
+  DEAD_RETENTION_MS: number;
 }
 
 export interface VaultEntry {
@@ -51,6 +58,9 @@ export interface VaultEntry {
   plan: string;
   memberSince: string;
   nextBilling: string;
+  /** Status di D1 bila entry berasal dari sana. */
+  status?: 'pending' | 'active' | 'dead';
+  reason?: string;
 }
 
 export interface Stats {

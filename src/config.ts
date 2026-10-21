@@ -32,5 +32,7 @@ export function readConfig(env: Env): Config {
     WEBHOOK_PATH: env.WEBHOOK_PATH || '/webhook',
     SECRET_TOKEN: env.SECRET_TOKEN || '',
     SETUP_KEY: env.SETUP_KEY || '',
+    ADMIN_WEB_KEY: env.ADMIN_WEB_KEY || '',
+    DEAD_RETENTION_MS: clamp(toInt(env.DEAD_RETENTION_MS, 604800000), 0, 2592000000),
   };
 }

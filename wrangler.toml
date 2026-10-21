@@ -8,15 +8,21 @@ compatibility_date = "2024-11-01"
 # (?host=... bila pakai custom domain)
 
 [triggers]
-crons = ["*/30 * * * *"]
+crons = ["* * * * *"]
 
 [[kv_namespaces]]
 binding = "Neetflix_KV"
 id = "b5505b88b1ab4a06918e72505c9328b9"
 
+# Vault akun sekarang ada di D1, bukan lagi satu blob di KV.
+[[d1_databases]]
+binding = "VAULT_DB"
+database_name = "neetflix-vault"
+database_id = "bae092ac-a8c8-4b8b-802c-f5e674f3adcf"
+
 # Variabel NON-rahasia ditaruh di sini supaya deploy berikutnya tidak
-# kehilangan konfigurasi. Rahasia (BOT_TOKEN, SECRET_TOKEN, SETUP_KEY)
-# disimpan lewat `wrangler secret put`, TIDAK di file ini.
+# kehilangan konfigurasi. Rahasia (BOT_TOKEN, SECRET_TOKEN, SETUP_KEY,
+# ADMIN_WEB_KEY) disimpan lewat `wrangler secret put`, TIDAK di file ini.
 [vars]
 ADMIN_ID = "6968439759"
 ADMIN_USERNAME = "iMediafairy"

@@ -1,4 +1,4 @@
-import type { GlobalUser, Stats, VaultEntry } from './types';
+import type { GlobalUser, Stats } from './types';
 
 const JSON_OPTIONS = { type: 'json' as const };
 
@@ -30,13 +30,6 @@ export class KVStore {
       cursor = page.list_complete ? undefined : page.cursor;
     } while (cursor);
     return out;
-  }
-
-  getVault(): Promise<VaultEntry[] | null> {    return this.getJson<VaultEntry[]>('global_vault');
-  }
-
-  setVault(vault: VaultEntry[]): Promise<void> {
-    return this.put('global_vault', vault);
   }
 
   getUsers(): Promise<GlobalUser[] | null> {

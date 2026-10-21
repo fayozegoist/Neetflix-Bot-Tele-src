@@ -51,3 +51,12 @@ jobs:
           echo "${{ secrets.BOT_TOKEN }}"     | npx wrangler secret put BOT_TOKEN
           echo "${{ secrets.SECRET_TOKEN }}"  | npx wrangler secret put SECRET_TOKEN
           echo "${{ secrets.SETUP_KEY }}"     | npx wrangler secret put SETUP_KEY
+
+      # Kunci /admin hanya didorong bila ada di repo — kalau tidak, secret yang
+      # sudah terpasang TIDAK boleh tertimpa nilai kosong.
+      - name: Push ADMIN_WEB_KEY
+        if: ${{ secrets.ADMIN_WEB_KEY != '' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: echo "${{ secrets.ADMIN_WEB_KEY }}" | npx wrangler secret put ADMIN_WEB_KEY

@@ -1,10 +1,15 @@
 import type { Config } from './types';
 import type { KVStore } from './kv';
+import type { VaultStore } from './vaultstore';
 import type { SendOptions, TgResult } from './telegram';
 import { sendMessage, tg } from './telegram';
 
 export class Bot {
-  constructor(readonly cfg: Config, readonly kv: KVStore) {}
+  constructor(
+    readonly cfg: Config,
+    readonly kv: KVStore,
+    readonly vault: VaultStore
+  ) {}
 
   send(chatId: number, text: string, options?: SendOptions): Promise<TgResult> {
     return sendMessage(this.cfg, chatId, text, options);

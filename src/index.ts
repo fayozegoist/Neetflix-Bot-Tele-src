@@ -1,18 +1,28 @@
 import type { Env, TgUpdate } from './types';
 import { readConfig } from './config';
 import { KVStore } from './kv';
+import { D1VaultRepo } from './vaultrepo';
 import { Bot } from './bot';
 import { handleMessage } from './handlers/message';
 import { handleCallbackQuery } from './handlers/callback';
+import { handleAdmin } from './admin';
 import { validateBatch } from './validate';
 import { processBroadcastBatch } from './broadcast';
 import { tg } from './telegram';
 
+const makeBot = (env: Env): Bot =>
+  new Bot(readConfig(env), new KVStore(env.Neetflix_KV), new D1VaultRepo(env.VAULT_DB));
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const bot = new Bot(readConfig(env), new KVStore(env.Neetflix_KV));
+    const bot = makeBot(env);
     const cfg = bot.cfg;
     const url = new URL(request.url);
+
+    // Halaman upload massal + progress (dikunci ADMIN_WEB_KEY).
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      return handleAdmin(request, bot, url);
+    }
 
     if (url.pathname === '/setwebhook') {
       const key = url.searchParams.get('key') || '';
@@ -60,11 +70,27 @@ export default {
   },
 
   async scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
-    const bot = new Bot(readConfig(env), new KVStore(env.Neetflix_KV));
+    const bot = makeBot(env);
     if (!bot.cfg.BOT_TOKEN) return;
 
-    // Broadcast DAN validasi tidak boleh jalan bersamaan: total subrequest
-    // bisa melebihi batas 50 subrequest per eksekusi pada free plan.
+    // Hanya SATU job berat per tick: free plan membatasi 50 subrequest per
+    // eksekusi, dan tiap validasi akun memakai 1 subrequest ke Netflix.
+    //
+    // 1) Antrean validasi (paling penting, supaya akun baru cepat siap pakai)
+    // 2) Broadcast yang belum selesai
+    // 3) Rotasi sweep akun aktif
+    try {
+      // `hasPending()` berhenti di baris pending pertama — biayanya 1 baris,
+      // bukan 5000. Inilah yang membuat cron tiap menit tetap aman terhadap
+      // kuota 5 juta baris-baca/hari D1 free plan.
+      if (await bot.vault.hasPending()) {
+        await validateBatch(bot);
+        return;
+      }
+    } catch (e) {
+      console.error('cek antrean validasi gagal:', (e as Error).message);
+    }
+
     const hadPending = await bot.kv.getPendingMessage('bcast_pending').catch(() => null);
     if (hadPending) {
       try {
@@ -72,13 +98,16 @@ export default {
       } catch (e) {
         console.error('processBroadcastBatch error:', (e as Error).message);
       }
-      return; // broadcast berjalan -> skip validasi di run ini
+      return;
     }
 
-    try {
-      await validateBatch(bot);
-    } catch (e) {
-      console.error('validateBatch error:', (e as Error).message);
+    // Sweep akun aktif tiap 5 menit saja, supaya tidak menghabiskan kuota.
+    if (new Date().getUTCMinutes() % 5 === 0) {
+      try {
+        await validateBatch(bot);
+      } catch (e) {
+        console.error('validateBatch error:', (e as Error).message);
+      }
     }
   },
 };

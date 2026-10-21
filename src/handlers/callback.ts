@@ -69,8 +69,7 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
   if (data.startsWith('vault_')) {
     const page = parseInt(data.split('_')[1], 10);
     if (Number.isNaN(page)) return;
-    const vault = (await bot.kv.getVault()) || [];
-    await sendVaultPage(bot, chatId, vault, page, messageId);
+    await sendVaultPage(bot, chatId, page, messageId);
     return;
   }
 
