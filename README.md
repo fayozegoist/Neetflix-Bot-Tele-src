@@ -11,8 +11,7 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
 
 | Fitur | Keterangan |
 |---|---|
-| 🔑 Generate Token | tombol menu → pilih negara → token dikirim |
-| 🎲 Generate Random | tombol menu → pilih negara → token dikirim |
+| 🎲 Generate Token | tombol menu → pilih negara → token dikirim |
 | 🌍 Daftar negara | 60 negara urut **A–Z**, tombol beremoji bendera, **3 halaman** (@20) |
 | 📁 Vault | penyimpanan akun, dipaginasi |
 | 📊 Cek Limit | status kuota + sisa cooldown |
@@ -27,8 +26,8 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
   menghabiskan jeda. Admin bebas cooldown.
   (Set `FREE_DAILY_LIMIT=0` untuk mode unlimited. Nilai > 0 mengaktifkan batas harian.)
 - **Generate hanya lewat tombol menu.** Command `/gen` sudah **dihapus** — tidak ada lagi
-  input cookie manual. Alurnya: tekan **🔑 Generate Token** (atau **🎲 Generate Random**)
-  → pilih negara → token dikirim. Yang masih mengetik `/gen` akan diarahkan ke menu.
+  input cookie manual. Alurnya: tekan **🎲 Generate Token** → pilih negara → token dikirim.
+  Yang masih mengetik `/gen` akan diarahkan ke menu.
 - **Wajib join channel** `@MediafairyCh` lalu tekan **Verifikasi**. Admin dikecualikan.
 - **Daftar negara urut A–Z** berdasarkan nama negara (Argentina … Vietnam), dibagi
   3 halaman berisi 20 negara, plus tombol **🎲 Semua Negara**.

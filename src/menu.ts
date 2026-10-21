@@ -6,7 +6,7 @@ export const COUNTRY_PAGE_SIZE = 20;
 
 export function mainMenu(isAdmin: boolean): ReplyMarkup {
   const menuKeyboard: Array<Array<{ text: string }>> = [
-    [{ text: '🔑 Generate Token' }, { text: '🎲 Generate Random' }],
+    [{ text: '🎲 Generate Token' }],
     [{ text: '📁 Vault Tersimpan' }, { text: '📊 Cek Limit' }],
     [{ text: '💳 Donasi' }],
   ];

@@ -146,8 +146,22 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     return;
   }
 
-  if (text === '🔑 Generate Token') {
+  if (text === '🎲 Generate Token') {
     await bot.send(chatId, COUNTRY_MENU_TEXT, { markup: countryMarkup(0) });
+    return;
+  }
+
+  // Label keyboard versi lama (sebelum dua tombol generate digabung).
+  // Telegram menyimpan reply-keyboard di perangkat sampai bot mengirim yang
+  // baru, jadi user yang belum menekan /start masih melihat tombol lama.
+  if (text === '🔑 Generate Token' || text === '🎲 Generate Random') {
+    await bot.send(
+      chatId,
+      '♻️ <b>Menu sudah diperbarui.</b>\n\n' +
+        'Sekarang cukup satu tombol: <b>🎲 Generate Token</b>.\n' +
+        'Keyboard di perangkat Anda sudah diganti — silakan tekan tombol di bawah ini. 👇',
+      { markup: mainMenu(isAdmin) }
+    );
     return;
   }
 
@@ -221,11 +235,6 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     return;
   }
 
-  if (text === '🎲 Generate Random') {
-    await bot.send(chatId, COUNTRY_MENU_TEXT, { markup: countryMarkup(0) });
-    return;
-  }
-
   if (/^\/conv(\s|$)/.test(text)) {
     if (!isAdmin) return void (await deny(bot, chatId, '⛔ <b>Akses Ditolak.</b>'));
     await processConvert(bot, text.replace(/^\/conv/, '').trim(), chatId);
@@ -237,7 +246,7 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
     await bot.send(
       chatId,
       'ℹ️ Command <code>/gen</code> sudah <b>tidak tersedia</b>.\n\n' +
-        'Sekarang generate token lewat <b>tombol menu</b>: tekan <b>🔑 Generate Token</b> ' +
+        'Sekarang generate token lewat <b>tombol menu</b>: tekan <b>🎲 Generate Token</b> ' +
         'lalu pilih negaranya.',
       { markup: mainMenu(isAdmin) }
     );
