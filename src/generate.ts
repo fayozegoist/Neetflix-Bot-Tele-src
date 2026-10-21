@@ -54,19 +54,9 @@ export async function processGeneration(
     return;
   }
 
-  // --- Catat cooldown SEBELUM generate ---
-  // Penting: cooldown harus tetap terpakai walau generate gagal, kalau tidak
-  // user bisa spam retry tanpa jeda sama sekali.
-  if (!isAdmin) {
-    stats.lastGen = Date.now();
-    await bot.kv.setStats(userId, stats);
-  }
-
   const countryLabel = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
-  await bot.send(
-    chatId,
-    `🔄 Memverifikasi${countryFilter ? ` dengan filter Negara: <b>${countryLabel}</b>` : ''}... mohon tunggu.`
-  );
+  const verifyMsg =
+    `🔄 Memverifikasi${countryFilter ? ` dengan filter Negara: <b>${countryLabel}</b>` : ''}... mohon tunggu.`;
 
   try {
     const vault = (await bot.kv.getVault()) || [];
@@ -77,14 +67,19 @@ export async function processGeneration(
     if (action === 'random') {
       const filteredVault = filterVaultByCountry(vault, countryFilter);
 
+      // Cek stok DULUAN. Bila tidak ada akun, user tidak dihukum cooldown
+      // karena memang tidak ada yang bisa dilayani.
       if (filteredVault.length === 0) {
         const scope = countryFilter && countryFilter !== 'global' ? countryFilter.toUpperCase() : 'SEMUA NEGARA';
         await bot.send(
           chatId,
-          `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan negara <b>${scope}</b> di Vault saat ini.`
+          `⚠️ <b>Stock Habis!</b>\nTidak ditemukan akun yang sesuai dengan negara <b>${scope}</b> di Vault saat ini.\n\n` +
+            `<i>Tidak ada cooldown yang terpakai — silakan coba negara lain.</i>`
         );
         return;
       }
+
+      await bot.send(chatId, verifyMsg);
 
       let success = false;
       let accountsRemoved = 0;
@@ -125,7 +120,8 @@ export async function processGeneration(
       if (!success) {
         await bot.send(
           chatId,
-          `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.`
+          `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +
+            `<i>Tidak ada cooldown yang terpakai.</i>`
         );
         return;
       }
@@ -146,6 +142,8 @@ export async function processGeneration(
         return;
       }
 
+      await bot.send(chatId, verifyMsg);
+
       const tokenData = await fetchNfToken(cookieDict.NetflixId);
       nfToken = tokenData.token;
       expires = tokenData.expires;
@@ -153,6 +151,14 @@ export async function processGeneration(
     }
 
     if (!nfToken || !expires || !meta) throw new Error('Gagal mengambil token.');
+
+    // --- Cooldown HANYA dicatat setelah token benar-benar berhasil dibuat ---
+    // Jadi gagal karena stok habis, cookie mati, atau input salah TIDAK
+    // menghabiskan jeda 1 menit user.
+    if (!isAdmin) {
+      stats.lastGen = Date.now();
+      await bot.kv.setStats(userId, stats);
+    }
 
     const loginBrowser = 'https://netflix.com/?nftoken=' + nfToken;
     const loginMobile = 'https://netflix.com/unsupported?nftoken=' + nfToken;

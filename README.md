@@ -21,7 +21,9 @@ Berjalan sebagai Cloudflare Worker (tanpa server), data disimpan di Cloudflare K
 
 ## Aturan yang berlaku
 
-- **Kuota: unlimited.** Cooldown tetap **60 detik** antar generate. Admin bebas cooldown.
+- **Kuota: unlimited.** Cooldown **60 detik** antar generate, dan **hanya terpakai kalau
+  generate berhasil**. Gagal karena stok habis, cookie mati, atau input salah **tidak**
+  menghabiskan jeda. Admin bebas cooldown.
   (Set `FREE_DAILY_LIMIT=0` untuk mode unlimited. Nilai > 0 mengaktifkan batas harian.)
 - **Wajib join channel** `@MediafairyCh` lalu tekan **Verifikasi**. Admin dikecualikan.
 - **Generate by negara** (bukan lagi by benua/region).
