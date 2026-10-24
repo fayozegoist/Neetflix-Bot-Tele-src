@@ -64,6 +64,28 @@ ribuan akun.
 - **Baris mati di-soft-delete** (`status='dead'` + alasan) supaya `/admin` masih bisa
   melaporkannya; cron menghapus permanen setelah `DEAD_RETENTION_MS` (default 7 hari).
   `/del` tetap menghapus permanen.
+- **Akun yang ditahan Netflix karena pembayaran tidak sampai ke user.** Sebelum token
+  dikirim, bot membaca halaman `netflix.com/account/membership` akun terpilih dan
+  melihat `growthHoldMetadata.isUserOnHold`. Bila `true` (mis.
+  `SERVICE_END_PAYMENT_FAILURE`, `SERVICE_END_NO_MOP`, `SERVICE_END_BUNDLE_SUSPEND`),
+  akun itu **dihapus dari vault** dan bot langsung mencoba kandidat berikutnya
+  (maksimal 8 percobaan). Akun seperti itu tetap bisa membuat token, tetapi user akan
+  mentok di layar tagihan — jadi lebih baik dibuang. Vault pun bersih sendiri seiring
+  pemakaian.
+  - Hanya **HTTP 200** yang dianggap sah. Timeout, 5xx, atau halaman tak dikenal =
+    **"tidak tahu"** → akun **tetap dipakai**; gangguan jaringan tidak boleh menghapus
+    akun. Matikan fitur ini dengan `CHECK_PAYMENT_HOLD=0`.
+  - Biaya: 1 request + ~0.2 ms CPU per kandidat (blok JSON dipotong lebih dulu, jadi
+    tidak pernah mengurai 400 KB penuh).
+- **Pesan token memuat detail asli akun** — dibaca dari halaman yang sama, jadi **tanpa
+  request tambahan**: email (disamarkan), status verifikasi email, negara + bendera,
+  plan, Member Since, Next Billing, metode bayar (`VISA •••• 1639` / `Airtel`), jumlah
+  profil, dan nomor HP dengan **4 digit terakhir disamarkan** (`+91951014xxxx`). Data ini
+  lebih akurat daripada teks berkas unggahan — label plan di berkas terbukti salah pada
+  ~30% akun. Bila halaman tidak terbaca, bot jatuh ke data berkas dan menulis status
+  *"Tidak diverifikasi"* dengan jujur.
+  - Rekap ke grup RecordBot **tetap** versi samar: tanpa detail di atas, tanpa token,
+    tanpa link login.
 - **Upload ulang file yang sama tidak menggandakan akun.** Dedupe memakai
   `cookie_hash` (128 bit pertama SHA-256 dari `NetflixId`) dengan UNIQUE index.
 - **Catatan generate ke grup RecordBot.** Setiap generate oleh user biasa dikirim ke
@@ -113,6 +135,7 @@ Non-rahasia ada di `wrangler.toml` (`[vars]`). Rahasia disimpan sebagai Worker s
 | `LOADING_MS` | `10000` | durasi stiker loading saat generate (ms), `0` = mati |
 | `LOADING_STICKERS` | `mfload` | nama set stiker dari `t.me/addstickers/<nama>` |
 | `DEAD_RETENTION_MS` | `604800000` | simpan baris mati selama ini sebelum dihapus permanen (7 hari) |
+| `CHECK_PAYMENT_HOLD` | `1` | saat generate, hapus akun yang ditahan Netflix karena pembayaran lalu coba kandidat lain. `0` = mati |
 | `GROUP_ID` | `-1003744140971` | grup **RecordBot** (@MFrecordbot): catatan tiap generate user biasa. Kosong = mati |
 | `WEBHOOK_PATH` | `/webhook` | |
 | `BOT_TOKEN`, `SECRET_TOKEN`, `SETUP_KEY`, `ADMIN_WEB_KEY` | — | **secret**, jangan commit |
@@ -172,6 +195,7 @@ src/
   dateparse.ts       parser "Next Billing" ES/PT/EN
   countries.ts       60 negara + resolver region -> ISO2 + emoji bendera
   netflix.ts         extractMetadata / extractCookieDict / fetchNfToken + klasifikasi error
+  safety.ts          baca halaman akun Netflix: hold pembayaran + detail akun + maskPhone
   hash.ts            cookieHash (SHA-256 -> 128 bit) untuk dedupe
   convert.ts         pipeline convert + aturan buang
   generate.ts        generate token + random by negara + cooldown

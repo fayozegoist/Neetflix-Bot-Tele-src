@@ -39,6 +39,11 @@ BROADCAST_BATCH = "25"
 # Nama set diambil dari t.me/addstickers/<nama>. 0 = mati.
 LOADING_MS = "10000"
 LOADING_STICKERS = "mfload"
+# Saat generate: akun yang ditahan Netflix karena masalah pembayaran
+# (growthHoldMetadata.isUserOnHold) dihapus dari vault lalu bot coba kandidat
+# berikutnya, supaya user tidak menerima akun yang mentok di layar tagihan.
+# 0 = mati (tanpa request tambahan ke halaman akun).
+CHECK_PAYMENT_HOLD = "1"
 # Grup "RecordBot" (@MFrecordbot) — tujuan catatan tiap generate user biasa.
 # Bot @MFnftokenBot sudah admin di sana. Kosongkan untuk mematikan.
 GROUP_ID = "-1003744140971"

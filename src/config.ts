@@ -34,5 +34,7 @@ export function readConfig(env: Env): Config {
     SETUP_KEY: env.SETUP_KEY || '',
     ADMIN_WEB_KEY: env.ADMIN_WEB_KEY || '',
     DEAD_RETENTION_MS: clamp(toInt(env.DEAD_RETENTION_MS, 604800000), 0, 2592000000),
+    // Cek penahanan pembayaran saat generate. 0 = mati (tanpa request tambahan).
+    CHECK_PAYMENT_HOLD: clamp(toInt(env.CHECK_PAYMENT_HOLD, 1), 0, 1),
   };
 }

@@ -18,6 +18,7 @@ export interface Env {
   SETUP_KEY?: string;
   ADMIN_WEB_KEY?: string;
   DEAD_RETENTION_MS?: string;
+  CHECK_PAYMENT_HOLD?: string;
   Neetflix_KV: KVNamespace;
   VAULT_DB: D1Database;
 }
@@ -46,6 +47,11 @@ export interface Config {
   ADMIN_WEB_KEY: string;
   /** Umur baris `dead` sebelum dipangkas dari D1. */
   DEAD_RETENTION_MS: number;
+  /**
+   * 1 = saat generate, akun yang ditahan Netflix karena pembayaran
+   * (`isUserOnHold`) dihapus dan bot pindah ke kandidat berikutnya. 0 = mati.
+   */
+  CHECK_PAYMENT_HOLD: number;
 }
 
 export interface VaultEntry {
