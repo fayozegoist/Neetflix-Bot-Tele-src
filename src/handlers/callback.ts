@@ -4,6 +4,7 @@ import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
 import { mainMenu, countryMarkup } from '../menu';
 import { sendVaultPage } from '../vault';
 import { processGeneration } from '../generate';
+import { countMap, readStats, STATS_MENU_MAX_AGE_MS } from '../vaultstats';
 
 export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQuery): Promise<void> {
   const message = callbackQuery.message;
@@ -77,12 +78,13 @@ export async function handleCallbackQuery(bot: Bot, callbackQuery: TgCallbackQue
   if (data.startsWith('rcpage_')) {
     const page = parseInt(data.split('_')[1], 10);
     if (Number.isNaN(page)) return;
+    const vstats = await readStats(bot, { maxAgeMs: STATS_MENU_MAX_AGE_MS });
     await bot.api('editMessageText', {
       chat_id: chatId,
       message_id: messageId,
       text: '🌍 <b>Pilih Negara:</b>\nPilih negara akun yang ingin kamu generate.',
       parse_mode: 'HTML',
-      reply_markup: countryMarkup(page),
+      reply_markup: countryMarkup(page, countMap(vstats), vstats.counts.active),
     });
     return;
   }

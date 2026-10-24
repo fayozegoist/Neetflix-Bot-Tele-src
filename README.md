@@ -38,6 +38,13 @@ ribuan akun.
   lagi muncul untuk user yang sudah lolos verifikasi.
 - **Daftar negara urut A–Z** berdasarkan nama negara (Argentina … Vietnam), dibagi
   3 halaman berisi 20 negara, plus tombol **🎲 Semua Negara**.
+  Tiap tombol menampilkan **jumlah stok siap pakai** untuk negara itu, mis.
+  `🇮🇩 Indonesia [3]` (`[0]` = kosong, tombolnya tetap bisa ditekan dan langsung
+  dibalas "stok kosong"). Tombol **🎲 Semua Negara** memakai total seluruh stok
+  *aktif* — sedikit lebih besar dari jumlah tombol karena akun tanpa kode negara
+  (dari berkas yang tidak memuat Region) hanya bisa keluar lewat tombol itu.
+  Angkanya dibaca dari cache rekap KV, **tanpa** memindai tabel D1 selama cache
+  masih ada (maks 6 jam); kalau cache hilang, rekap dihitung sekali lalu dipakai.
 - **Stiker loading saat generate.** Saat menekan tombol negara, bot mengirim satu stiker
   acak dari [set `mfload`](https://t.me/addstickers/mfload) sebagai penanda proses, lalu
   **menghapusnya** tepat sebelum token dikirim — jadi chat tetap bersih. Loading ini
@@ -108,6 +115,7 @@ kuota. Karena itu jalur panas dibuat menyempit, dan diukur langsung di D1 produk
 | Operasi | Baris dibaca |
 |---|---|
 | Cek antrean tiap menit (`hasPending`) | **1** |
+| Menu negara (angka stok, dari cache KV) | **0** |
 | Generate, per negara (`pickRandom`) | **~11** |
 | Satu halaman Vault | **11** |
 | Rekap `/admin` (hanya saat cache basi) | ~9.500 |

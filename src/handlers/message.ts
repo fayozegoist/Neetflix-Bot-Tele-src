@@ -6,7 +6,7 @@ import { isChannelMember, joinGateMarkup, markVerified } from '../gate';
 import { countryMarkup, mainMenu } from '../menu';
 import { sendVaultPage } from '../vault';
 import { loadBreaker } from '../breaker';
-import { readStats } from '../vaultstats';
+import { countMap, readStats, STATS_MENU_MAX_AGE_MS } from '../vaultstats';
 import { handleDonasi } from '../donation';
 import { processConvert } from '../convert';
 import { BROADCAST_BATCH, processBroadcastBatch } from '../broadcast';
@@ -18,7 +18,8 @@ const cooldownSec = (bot: Bot): number => Math.round(bot.cfg.COOLDOWN_MS / 1000)
 /** Teks pembuka menu pilih negara (satu-satunya jalur generate). */
 const COUNTRY_MENU_TEXT =
   '🌍 <b>Pilih Negara Akun</b>\n\n' +
-  'Tekan tombol negara untuk generate token secara acak dari stok negara tersebut.\n\n' +
+  'Tekan tombol negara untuk generate token secara acak dari stok negara tersebut.\n' +
+  'Angka <b>[ ]</b> = jumlah akun siap pakai.\n\n' +
   'Ingin dari negara mana saja? Pilih <b>🎲 Semua Negara</b>.';
 
 export async function handleMessage(bot: Bot, message: TgMessage): Promise<void> {
@@ -173,7 +174,11 @@ export async function handleMessage(bot: Bot, message: TgMessage): Promise<void>
   }
 
   if (text === '🎲 Generate Token') {
-    await bot.send(chatId, COUNTRY_MENU_TEXT, { markup: countryMarkup(0) });
+    // Stok diambil dari rekap KV (tanpa menyentuh D1 selama cache ada).
+    const vstats = await readStats(bot, { maxAgeMs: STATS_MENU_MAX_AGE_MS });
+    await bot.send(chatId, COUNTRY_MENU_TEXT, {
+      markup: countryMarkup(0, countMap(vstats), vstats.counts.active),
+    });
     return;
   }
 

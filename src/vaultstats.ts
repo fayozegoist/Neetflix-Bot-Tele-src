@@ -14,6 +14,31 @@ import type { VaultStats } from './vaultstore';
 export const STATS_KEY = 'vault_stats';
 export const STATS_TTL_MS = 10 * 60 * 1000;
 
+/**
+ * Umur maksimum rekap yang boleh dipakai menu negara.
+ *
+ * Menu negara dibuka jauh lebih sering daripada halaman /admin, jadi menu
+ * TIDAK boleh memicu pemindaian tabel D1 tiap kali dibuka. Dengan batas 6 jam:
+ * selama cache masih ada (umur berapa pun sampai 6 jam) menu memakainya tanpa
+ * menyentuh D1 sama sekali; hanya kalau cache kosong/hilang rekap dihitung
+ * sekali. Halaman Vault & /admin tetap menyegarkan cache tiap <=10 menit, jadi
+ * dalam praktiknya angka yang tampil selalu segar.
+ */
+export const STATS_MENU_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * `byCountry[]` -> `{ kode: jumlah }` untuk label tombol menu.
+ * Bucket `??` (baris tanpa kode negara) dibuang karena tidak punya tombol.
+ */
+export function countMap(stats: VaultStats): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const row of stats.byCountry) {
+    if (!row.country || row.country === '??') continue;
+    out[row.country] = row.count;
+  }
+  return out;
+}
+
 export interface CachedStats extends VaultStats {
   /** Kapan rekap ini dihitung (epoch ms). */
   at: number;
